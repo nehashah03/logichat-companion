@@ -11,8 +11,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { ChatMessage, ToolOutput } from '../../features/chat/chatSlice';
-import { formatTimestamp } from '../../utils/helpers';
+import type { ChatMessage, ToolOutput } from '../features/chat/chatSlice';
+import { formatTimestamp } from '../utils/helpers';
 
 interface MessageBubbleProps {
   message: ChatMessage;
