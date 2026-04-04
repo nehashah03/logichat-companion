@@ -127,9 +127,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onRetry }) => {
                 if (match) return <CodeBlock language={match[1]} value={value} />;
                 return (
                   <code style={{
-                    bgcolor: 'rgba(255,255,255,0.06)', px: 0.75, py: 0.25,
+                    background: 'rgba(255,255,255,0.06)', padding: '1px 6px',
                     borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.85em',
-                  }} {...props}>{children}</Box>
+                  }} {...props}>{children}</code>
                 );
               },
             }}
