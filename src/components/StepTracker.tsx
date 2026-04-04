@@ -68,7 +68,7 @@ const StepTracker: React.FC<StepTrackerProps> = ({ stage, toolName, elapsed }) =
         );
       })}
 
-      {stage !== 'idle' && stage !== 'complete' && (
+      {stage !== 'complete' && (
         <Box sx={{ mt: 'auto', p: 1.5, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 1 }}>
           <Typography variant="caption" color="text.secondary">
             Elapsed: {formatElapsed(elapsed)}
