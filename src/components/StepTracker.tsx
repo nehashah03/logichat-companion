@@ -11,11 +11,11 @@ interface StepTrackerProps {
   elapsed: number;
 }
 
-const STAGES: { key: PipelineStage; label: string }[] = [
-  { key: 'routing', label: 'Routing' },
-  { key: 'planning', label: 'Planning' },
-  { key: 'executing', label: 'Executing' },
-  { key: 'synthesizing', label: 'Synthesizing' },
+const STAGES: { key: PipelineStage; label: string; icon: string }[] = [
+  { key: 'routing', label: 'Routing', icon: '→' },
+  { key: 'planning', label: 'Planning', icon: '◇' },
+  { key: 'executing', label: 'Executing', icon: '⚡' },
+  { key: 'synthesizing', label: 'Synthesizing', icon: '✦' },
 ];
 
 const StepTracker: React.FC<StepTrackerProps> = ({ stage, toolName, elapsed }) => {
@@ -26,10 +26,10 @@ const StepTracker: React.FC<StepTrackerProps> = ({ stage, toolName, elapsed }) =
 
   return (
     <Box sx={{
-      width: 240, height: '100vh', borderLeft: '1px solid', borderColor: 'divider',
-      bgcolor: 'background.paper', p: 2, display: 'flex', flexDirection: 'column',
+      width: 220, height: '100vh', borderLeft: '1px solid', borderColor: '#2D2D2D',
+      bgcolor: '#1E1E1E', p: 2, display: 'flex', flexDirection: 'column',
     }}>
-      <Typography variant="subtitle2" sx={{ mb: 2, color: 'text.secondary', fontSize: 11, letterSpacing: 1, textTransform: 'uppercase' }}>
+      <Typography sx={{ mb: 2, color: '#666', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: 600 }}>
         Pipeline
       </Typography>
 
@@ -38,29 +38,29 @@ const StepTracker: React.FC<StepTrackerProps> = ({ stage, toolName, elapsed }) =
         const isActive = s.key === stage;
 
         return (
-          <Box key={s.key} sx={{ display: 'flex', alignItems: 'flex-start', mb: 0.5 }}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mr: 1.5, minWidth: 24 }}>
+          <Box key={s.key} sx={{ display: 'flex', alignItems: 'flex-start', mb: 0.25 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mr: 1.5, minWidth: 20 }}>
               {isDone ? (
-                <CheckCircleIcon sx={{ fontSize: 20, color: 'secondary.main' }} />
+                <CheckCircleIcon sx={{ fontSize: 18, color: '#00D68F' }} />
               ) : isActive ? (
-                <CircularProgress size={20} thickness={5} sx={{ color: 'primary.main' }} />
+                <CircularProgress size={18} thickness={5} sx={{ color: '#007AFF' }} />
               ) : (
-                <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: 'text.disabled' }} />
+                <RadioButtonUncheckedIcon sx={{ fontSize: 18, color: '#444' }} />
               )}
               {i < STAGES.length - 1 && (
-                <Box sx={{ width: 2, height: 24, bgcolor: isDone ? 'secondary.main' : 'divider', my: 0.5, borderRadius: 1 }} />
+                <Box sx={{ width: 1.5, height: 20, bgcolor: isDone ? '#00D68F' : '#333', my: 0.25, borderRadius: 1 }} />
               )}
             </Box>
-            <Box sx={{ pt: 0.25 }}>
-              <Typography variant="body2" sx={{
-                fontWeight: isActive ? 600 : 400,
-                color: isDone ? 'secondary.main' : isActive ? 'text.primary' : 'text.disabled',
+            <Box sx={{ pt: 0.1 }}>
+              <Typography sx={{
+                fontWeight: isActive ? 600 : 400, fontSize: 12.5,
+                color: isDone ? '#00D68F' : isActive ? '#E8E8E8' : '#555',
               }}>
                 {s.label}
               </Typography>
               {isActive && s.key === 'executing' && toolName && (
-                <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'primary.main', fontSize: 11 }}>
-                  {toolName}
+                <Typography sx={{ fontFamily: 'monospace', color: '#007AFF', fontSize: 10.5 }}>
+                  ⚡ {toolName}
                 </Typography>
               )}
             </Box>
@@ -69,9 +69,9 @@ const StepTracker: React.FC<StepTrackerProps> = ({ stage, toolName, elapsed }) =
       })}
 
       {stage !== 'complete' && (
-        <Box sx={{ mt: 'auto', p: 1.5, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 1 }}>
-          <Typography variant="caption" color="text.secondary">
-            Elapsed: {formatElapsed(elapsed)}
+        <Box sx={{ mt: 'auto', py: 1, px: 1.5, bgcolor: '#252525', borderRadius: '6px', border: '1px solid #333' }}>
+          <Typography sx={{ fontSize: 11, color: '#808080', fontFamily: 'monospace' }}>
+            {formatElapsed(elapsed)}
           </Typography>
         </Box>
       )}

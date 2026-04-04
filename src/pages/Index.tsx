@@ -13,7 +13,7 @@ const AppContent: React.FC = () => {
   const { pipelineStage, currentToolName, elapsedTime } = useAppSelector(s => s.chat);
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: '#1A1A1A' }}>
       <SessionSidebar />
       <ChatPanel />
       {pipelineStage !== 'idle' && (
