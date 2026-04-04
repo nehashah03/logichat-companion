@@ -1,16 +1,35 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import React from 'react';
+import { Box } from '@mui/material';
+import { ThemeProvider, CssBaseline } from '@mui/material';
+import { darkTheme } from '../theme';
+import { Provider } from 'react-redux';
+import { store } from '../store';
+import SessionSidebar from '../components/SessionSidebar';
+import ChatPanel from '../components/ChatPanel';
+import StepTracker from '../components/StepTracker';
+import { useAppSelector } from '../store/hooks';
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+const AppContent: React.FC = () => {
+  const { pipelineStage, currentToolName, elapsedTime } = useAppSelector(s => s.chat);
+
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
-    </div>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: 'background.default' }}>
+      <SessionSidebar />
+      <ChatPanel />
+      {pipelineStage !== 'idle' && (
+        <StepTracker stage={pipelineStage} toolName={currentToolName} elapsed={elapsedTime} />
+      )}
+    </Box>
   );
 };
 
-const Index = PlaceholderIndex;
+const Index: React.FC = () => (
+  <Provider store={store}>
+    <ThemeProvider theme={darkTheme}>
+      <CssBaseline />
+      <AppContent />
+    </ThemeProvider>
+  </Provider>
+);
 
 export default Index;
