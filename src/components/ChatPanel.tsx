@@ -32,7 +32,6 @@ const ChatPanel: React.FC = () => {
     return () => wsService.disconnect();
   }, []);
 
-  // Save messages to session
   useEffect(() => {
     if (activeSessionId && messages.length > 0) {
       dispatch(updateSessionMessages({ id: activeSessionId, messages: [...messages] }));
@@ -54,7 +53,6 @@ const ChatPanel: React.FC = () => {
   }, []);
 
   const handleSend = useCallback(async (content: string, attachments: FileAttachment[]) => {
-    // Create session if needed
     let sessionId = activeSessionId;
     if (!sessionId) {
       sessionId = generateId();
@@ -111,7 +109,7 @@ const ChatPanel: React.FC = () => {
 
   const handleExport = useCallback(() => {
     const text = messages.map(m =>
-      `[${m.role === 'user' ? 'You' : 'DevAssist'}] ${new Date(m.timestamp).toLocaleString()}\n${m.content}\n`
+      `[${m.role === 'user' ? 'You' : 'Cursor AI'}] ${new Date(m.timestamp).toLocaleString()}\n${m.content}\n`
     ).join('\n---\n\n');
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -121,42 +119,39 @@ const ChatPanel: React.FC = () => {
   }, [messages]);
 
   return (
-    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', minWidth: 0 }}>
+    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', minWidth: 0, bgcolor: '#1A1A1A' }}>
       {/* Header */}
       <Box sx={{
-        px: 3, py: 1.5, borderBottom: '1px solid', borderColor: 'divider',
+        px: 3, py: 1, borderBottom: '1px solid', borderColor: '#2D2D2D',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        bgcolor: 'background.paper',
+        bgcolor: '#1E1E1E', minHeight: 42,
       }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: 14 }}>
+        <Typography sx={{ fontWeight: 500, fontSize: 13, color: '#999' }}>
           {sessions.find(s => s.id === activeSessionId)?.title || 'New Conversation'}
         </Typography>
         {messages.length > 0 && (
-          <Button size="small" onClick={handleExport} sx={{ fontSize: 12, color: 'text.secondary' }}>
+          <Button size="small" onClick={handleExport} sx={{ fontSize: 11, color: '#666', minWidth: 0, '&:hover': { color: '#999' } }}>
             Export
           </Button>
         )}
       </Box>
 
       {/* Messages */}
-      <Box ref={scrollRef} sx={{ flex: 1, overflow: 'auto', py: 2 }}>
+      <Box ref={scrollRef} sx={{ flex: 1, overflow: 'auto', py: 1 }}>
         {messages.length === 0 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2 }}>
-            <Box sx={{
-              width: 64, height: 64, borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'linear-gradient(135deg, rgba(108,142,239,0.2) 0%, rgba(45,212,168,0.2) 100%)',
-            }}>
-              <Typography sx={{ fontSize: 28 }}>🔍</Typography>
-            </Box>
-            <Typography variant="h6" sx={{ fontSize: 18 }}>What would you like to analyze?</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 400, textAlign: 'center' }}>
-              Paste logs, describe a ticket, or upload system outputs. I'll help you analyze and debug.
+            <Typography sx={{ fontSize: 16, fontWeight: 600, color: '#E8E8E8' }}>What can I help you with?</Typography>
+            <Typography variant="body2" sx={{ color: '#666', maxWidth: 420, textAlign: 'center', fontSize: 13 }}>
+              Paste logs, describe a ticket, or upload system outputs. I'll analyze and debug.
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
               {['Analyze error logs', 'Debug a stack trace', 'Review system metrics', 'Parse ticket data'].map(s => (
                 <Button key={s} size="small" variant="outlined"
                   onClick={() => handleSend(s, [])}
-                  sx={{ borderColor: 'divider', color: 'text.secondary', fontSize: 12, borderRadius: 2, '&:hover': { borderColor: 'primary.main' } }}>
+                  sx={{
+                    borderColor: '#333', color: '#888', fontSize: 12, borderRadius: '6px',
+                    '&:hover': { borderColor: '#007AFF', color: '#007AFF', bgcolor: 'rgba(0,122,255,0.06)' },
+                  }}>
                   {s}
                 </Button>
               ))}
@@ -173,14 +168,12 @@ const ChatPanel: React.FC = () => {
         {isStreaming && messages[messages.length - 1]?.content === '' && <TypingIndicator />}
       </Box>
 
-      {/* Error banner */}
       <Snackbar open={!!error} autoHideDuration={5000} onClose={() => dispatch(setError(null))}>
-        <Alert severity="error" onClose={() => dispatch(setError(null))} sx={{ bgcolor: 'rgba(248,113,113,0.1)', color: 'error.main' }}>
+        <Alert severity="error" onClose={() => dispatch(setError(null))} sx={{ bgcolor: 'rgba(255,107,107,0.1)', color: '#FF6B6B', border: '1px solid rgba(255,107,107,0.2)' }}>
           {error}
         </Alert>
       </Snackbar>
 
-      {/* Input */}
       <ChatInput onSend={handleSend} disabled={isStreaming} />
     </Box>
   );

@@ -50,39 +50,33 @@ const SessionSidebar: React.FC = () => {
 
   return (
     <Box sx={{
-      width: 280, height: '100vh', display: 'flex', flexDirection: 'column',
-      bgcolor: 'background.paper', borderRight: '1px solid', borderColor: 'divider',
+      width: 260, height: '100vh', display: 'flex', flexDirection: 'column',
+      bgcolor: '#1E1E1E', borderRight: '1px solid', borderColor: '#2D2D2D',
     }}>
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Box sx={{
-          width: 32, height: 32, borderRadius: '8px', display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          background: 'linear-gradient(135deg, #6C8EEF 0%, #2DD4A8 100%)',
-        }}>
-          <Typography sx={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>AI</Typography>
-        </Box>
-        <Typography variant="h6" sx={{ fontSize: 16, flex: 1 }}>DevAssist</Typography>
+      {/* Header - clean, no icon */}
+      <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center' }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#808080', letterSpacing: '0.5px', textTransform: 'uppercase', flex: 1 }}>
+          Chat History
+        </Typography>
       </Box>
 
-      <Box sx={{ px: 2, pb: 1 }}>
+      <Box sx={{ px: 1.5, pb: 1 }}>
         <Button
-          fullWidth variant="outlined" startIcon={<AddIcon />}
+          fullWidth variant="text" startIcon={<AddIcon sx={{ fontSize: '16px !important' }} />}
           onClick={handleNewChat}
           sx={{
-            borderColor: 'divider', color: 'text.primary', justifyContent: 'flex-start',
-            '&:hover': { borderColor: 'primary.main', bgcolor: 'rgba(108,142,239,0.08)' },
+            color: '#E8E8E8', justifyContent: 'flex-start', fontSize: 13, py: 0.75,
+            borderRadius: '6px',
+            '&:hover': { bgcolor: 'rgba(255,255,255,0.06)' },
           }}
         >
           New Chat
         </Button>
       </Box>
 
-      <Divider />
+      <Divider sx={{ borderColor: '#2D2D2D' }} />
 
-      <Box sx={{ flex: 1, overflow: 'auto', px: 1, py: 1 }}>
-        <Typography variant="caption" sx={{ px: 1, color: 'text.secondary', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
-          History
-        </Typography>
+      <Box sx={{ flex: 1, overflow: 'auto', px: 0.75, py: 0.75 }}>
         <List dense disablePadding>
           {sessions.map(session => (
             <ListItemButton
@@ -90,52 +84,52 @@ const SessionSidebar: React.FC = () => {
               selected={session.id === activeSessionId}
               onClick={() => handleSelectSession(session.id)}
               sx={{
-                borderRadius: '8px', mb: 0.5, px: 1.5, py: 1,
-                '&.Mui-selected': { bgcolor: 'rgba(108,142,239,0.12)' },
+                borderRadius: '6px', mb: 0.25, px: 1.5, py: 0.75, minHeight: 36,
+                '&.Mui-selected': { bgcolor: 'rgba(255,255,255,0.08)' },
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+                '& .delete-btn': { opacity: 0 },
+                '&:hover .delete-btn': { opacity: 1 },
               }}
             >
-              <ChatBubbleOutlineIcon sx={{ fontSize: 16, mr: 1.5, color: 'text.secondary' }} />
+              <ChatBubbleOutlineIcon sx={{ fontSize: 14, mr: 1.5, color: '#666' }} />
               <ListItemText
                 primary={session.title}
                 secondary={formatTimestamp(session.updatedAt)}
-                primaryTypographyProps={{ noWrap: true, fontSize: 13, fontWeight: 500 }}
-                secondaryTypographyProps={{ fontSize: 11 }}
+                primaryTypographyProps={{ noWrap: true, fontSize: 12.5, fontWeight: 400, color: '#CCC' }}
+                secondaryTypographyProps={{ fontSize: 10, color: '#666' }}
               />
-              <Tooltip title="Delete">
-                <IconButton size="small" onClick={(e) => handleDeleteSession(e, session.id)}
-                  sx={{ opacity: 0.4, '&:hover': { opacity: 1, color: 'error.main' } }}>
-                  <DeleteOutlineIcon sx={{ fontSize: 16 }} />
-                </IconButton>
-              </Tooltip>
+              <IconButton className="delete-btn" size="small" onClick={(e) => handleDeleteSession(e, session.id)}
+                sx={{ color: '#666', '&:hover': { color: '#FF6B6B' } }}>
+                <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+              </IconButton>
             </ListItemButton>
           ))}
         </List>
         {sessions.length === 0 && (
           <Box sx={{ p: 3, textAlign: 'center' }}>
-            <ChatBubbleOutlineIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography variant="body2" color="text.secondary">No conversations yet</Typography>
+            <Typography variant="body2" sx={{ color: '#555', fontSize: 12 }}>No conversations yet</Typography>
           </Box>
         )}
       </Box>
 
       {sessions.length > 0 && (
-        <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: '#2D2D2D' }}>
           <Button
-            fullWidth size="small" startIcon={<DeleteSweepIcon />}
+            fullWidth size="small" startIcon={<DeleteSweepIcon sx={{ fontSize: '14px !important' }} />}
             onClick={() => setConfirmClear(true)}
-            sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+            sx={{ color: '#666', fontSize: 11, '&:hover': { color: '#FF6B6B' } }}
           >
             Clear History
           </Button>
         </Box>
       )}
 
-      <Dialog open={confirmClear} onClose={() => setConfirmClear(false)}>
-        <DialogTitle>Clear all conversations?</DialogTitle>
+      <Dialog open={confirmClear} onClose={() => setConfirmClear(false)}
+        PaperProps={{ sx: { bgcolor: '#252525', border: '1px solid #333' } }}>
+        <DialogTitle sx={{ fontSize: 14 }}>Clear all conversations?</DialogTitle>
         <DialogActions>
-          <Button onClick={() => setConfirmClear(false)}>Cancel</Button>
-          <Button onClick={handleClearAll} color="error">Clear All</Button>
+          <Button onClick={() => setConfirmClear(false)} sx={{ color: '#808080' }}>Cancel</Button>
+          <Button onClick={handleClearAll} sx={{ color: '#FF6B6B' }}>Clear All</Button>
         </DialogActions>
       </Dialog>
     </Box>
