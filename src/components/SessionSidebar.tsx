@@ -7,10 +7,10 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { createSession, setActiveSession, deleteSession, clearAllSessions } from '../../features/session/sessionSlice';
-import { loadMessages, clearMessages } from '../../features/chat/chatSlice';
-import { generateId, formatTimestamp } from '../../utils/helpers';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { createSession, setActiveSession, deleteSession, clearAllSessions } from '../features/session/sessionSlice';
+import { loadMessages, clearMessages } from '../features/chat/chatSlice';
+import { generateId, formatTimestamp } from '../utils/helpers';
 
 const SessionSidebar: React.FC = () => {
   const dispatch = useAppDispatch();

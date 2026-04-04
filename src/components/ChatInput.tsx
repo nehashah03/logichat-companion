@@ -6,8 +6,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useDropzone } from 'react-dropzone';
-import { isLargeContent, formatFileSize } from '../../utils/helpers';
-import type { FileAttachment } from '../../features/chat/chatSlice';
+import { isLargeContent, formatFileSize } from '../utils/helpers';
+import type { FileAttachment } from '../features/chat/chatSlice';
 
 interface ChatInputProps {
   onSend: (message: string, attachments: FileAttachment[]) => void;

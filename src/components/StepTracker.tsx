@@ -2,8 +2,8 @@ import React from 'react';
 import { Box, Typography, CircularProgress } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
-import type { PipelineStage } from '../../features/chat/chatSlice';
-import { formatElapsed } from '../../utils/helpers';
+import type { PipelineStage } from '../features/chat/chatSlice';
+import { formatElapsed } from '../utils/helpers';
 
 interface StepTrackerProps {
   stage: PipelineStage;
