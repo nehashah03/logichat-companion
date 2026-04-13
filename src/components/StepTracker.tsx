@@ -11,11 +11,11 @@ interface StepTrackerProps {
   elapsed: number;
 }
 
-const STAGES: { key: PipelineStage; label: string; icon: string }[] = [
-  { key: 'routing', label: 'Routing', icon: '→' },
-  { key: 'planning', label: 'Planning', icon: '◇' },
-  { key: 'executing', label: 'Executing', icon: '⚡' },
-  { key: 'synthesizing', label: 'Synthesizing', icon: '✦' },
+const STAGES: { key: PipelineStage; label: string }[] = [
+  { key: 'analyzing', label: 'Analyzing Query' },
+  { key: 'searching', label: 'Searching Documents' },
+  { key: 'extracting', label: 'Extracting Details' },
+  { key: 'generating', label: 'Generating Response' },
 ];
 
 const StepTracker: React.FC<StepTrackerProps> = ({ stage, toolName, elapsed }) => {
@@ -26,10 +26,10 @@ const StepTracker: React.FC<StepTrackerProps> = ({ stage, toolName, elapsed }) =
 
   return (
     <Box sx={{
-      width: 220, height: '100vh', borderLeft: '1px solid', borderColor: '#2D2D2D',
-      bgcolor: '#1E1E1E', p: 2, display: 'flex', flexDirection: 'column',
+      width: 220, height: '100vh', borderLeft: '1px solid', borderColor: '#E5E7EB',
+      bgcolor: '#F9FAFB', p: 2, display: 'flex', flexDirection: 'column',
     }}>
-      <Typography sx={{ mb: 2, color: '#666', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: 600 }}>
+      <Typography sx={{ mb: 2, color: '#999', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: 600 }}>
         Pipeline
       </Typography>
 
@@ -41,26 +41,26 @@ const StepTracker: React.FC<StepTrackerProps> = ({ stage, toolName, elapsed }) =
           <Box key={s.key} sx={{ display: 'flex', alignItems: 'flex-start', mb: 0.25 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mr: 1.5, minWidth: 20 }}>
               {isDone ? (
-                <CheckCircleIcon sx={{ fontSize: 18, color: '#00D68F' }} />
+                <CheckCircleIcon sx={{ fontSize: 18, color: '#2e7d32' }} />
               ) : isActive ? (
-                <CircularProgress size={18} thickness={5} sx={{ color: '#007AFF' }} />
+                <CircularProgress size={18} thickness={5} sx={{ color: '#1976d2' }} />
               ) : (
-                <RadioButtonUncheckedIcon sx={{ fontSize: 18, color: '#444' }} />
+                <RadioButtonUncheckedIcon sx={{ fontSize: 18, color: '#ddd' }} />
               )}
               {i < STAGES.length - 1 && (
-                <Box sx={{ width: 1.5, height: 20, bgcolor: isDone ? '#00D68F' : '#333', my: 0.25, borderRadius: 1 }} />
+                <Box sx={{ width: 1.5, height: 20, bgcolor: isDone ? '#2e7d32' : '#E5E7EB', my: 0.25, borderRadius: 1 }} />
               )}
             </Box>
             <Box sx={{ pt: 0.1 }}>
               <Typography sx={{
                 fontWeight: isActive ? 600 : 400, fontSize: 12.5,
-                color: isDone ? '#00D68F' : isActive ? '#E8E8E8' : '#555',
+                color: isDone ? '#2e7d32' : isActive ? '#333' : '#bbb',
               }}>
                 {s.label}
               </Typography>
-              {isActive && s.key === 'executing' && toolName && (
-                <Typography sx={{ fontFamily: 'monospace', color: '#007AFF', fontSize: 10.5 }}>
-                  ⚡ {toolName}
+              {isActive && toolName && (
+                <Typography sx={{ color: '#1976d2', fontSize: 10.5 }}>
+                  {toolName}
                 </Typography>
               )}
             </Box>
@@ -69,8 +69,8 @@ const StepTracker: React.FC<StepTrackerProps> = ({ stage, toolName, elapsed }) =
       })}
 
       {stage !== 'complete' && (
-        <Box sx={{ mt: 'auto', py: 1, px: 1.5, bgcolor: '#252525', borderRadius: '6px', border: '1px solid #333' }}>
-          <Typography sx={{ fontSize: 11, color: '#808080', fontFamily: 'monospace' }}>
+        <Box sx={{ mt: 'auto', py: 1, px: 1.5, bgcolor: '#F3F4F6', borderRadius: '6px', border: '1px solid #E5E7EB' }}>
+          <Typography sx={{ fontSize: 11, color: '#666', fontFamily: 'monospace' }}>
             {formatElapsed(elapsed)}
           </Typography>
         </Box>

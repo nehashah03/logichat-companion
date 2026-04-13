@@ -8,6 +8,9 @@ export interface ChatMessage {
   status: 'sending' | 'streaming' | 'complete' | 'error';
   toolOutputs?: ToolOutput[];
   attachments?: FileAttachment[];
+  sources?: SourceDoc[];
+  citations?: Citation[];
+  processingSteps?: ProcessingStep[];
 }
 
 export interface ToolOutput {
@@ -24,7 +27,27 @@ export interface FileAttachment {
   preview?: string;
 }
 
-export type PipelineStage = 'idle' | 'routing' | 'planning' | 'executing' | 'synthesizing' | 'complete';
+export interface SourceDoc {
+  name: string;
+  url?: string;
+  snippet: string;
+}
+
+export interface Citation {
+  index: number;
+  text: string;
+  source: string;
+}
+
+export interface ProcessingStep {
+  id: string;
+  label: string;
+  description: string;
+  status: 'pending' | 'active' | 'complete';
+  timestamp?: number;
+}
+
+export type PipelineStage = 'idle' | 'analyzing' | 'searching' | 'extracting' | 'generating' | 'complete';
 
 interface ChatState {
   messages: ChatMessage[];
@@ -33,6 +56,7 @@ interface ChatState {
   currentToolName: string | null;
   elapsedTime: number;
   error: string | null;
+  processingSteps: ProcessingStep[];
 }
 
 const initialState: ChatState = {
@@ -42,6 +66,7 @@ const initialState: ChatState = {
   currentToolName: null,
   elapsedTime: 0,
   error: null,
+  processingSteps: [],
 };
 
 const chatSlice = createSlice({
@@ -75,6 +100,18 @@ const chatSlice = createSlice({
         msg.toolOutputs.push(action.payload.output);
       }
     },
+    setMessageSources(state, action: PayloadAction<{ messageId: string; sources: SourceDoc[] }>) {
+      const msg = state.messages.find(m => m.id === action.payload.messageId);
+      if (msg) msg.sources = action.payload.sources;
+    },
+    setMessageCitations(state, action: PayloadAction<{ messageId: string; citations: Citation[] }>) {
+      const msg = state.messages.find(m => m.id === action.payload.messageId);
+      if (msg) msg.citations = action.payload.citations;
+    },
+    setMessageProcessingSteps(state, action: PayloadAction<{ messageId: string; steps: ProcessingStep[] }>) {
+      const msg = state.messages.find(m => m.id === action.payload.messageId);
+      if (msg) msg.processingSteps = action.payload.steps;
+    },
     setStreaming(state, action: PayloadAction<boolean>) {
       state.isStreaming = action.payload;
     },
@@ -90,6 +127,16 @@ const chatSlice = createSlice({
     setError(state, action: PayloadAction<string | null>) {
       state.error = action.payload;
     },
+    setProcessingSteps(state, action: PayloadAction<ProcessingStep[]>) {
+      state.processingSteps = action.payload;
+    },
+    updateProcessingStep(state, action: PayloadAction<{ id: string; status: ProcessingStep['status'] }>) {
+      const step = state.processingSteps.find(s => s.id === action.payload.id);
+      if (step) {
+        step.status = action.payload.status;
+        if (action.payload.status === 'complete') step.timestamp = Date.now();
+      }
+    },
     loadMessages(state, action: PayloadAction<ChatMessage[]>) {
       state.messages = action.payload;
     },
@@ -98,6 +145,7 @@ const chatSlice = createSlice({
       state.isStreaming = false;
       state.pipelineStage = 'idle';
       state.error = null;
+      state.processingSteps = [];
     },
   },
 });
@@ -106,5 +154,7 @@ export const {
   addMessage, updateMessage, appendToMessage, setMessageStatus,
   addToolOutput, setStreaming, setPipelineStage, setCurrentTool,
   setElapsedTime, setError, loadMessages, clearMessages,
+  setMessageSources, setMessageCitations, setMessageProcessingSteps,
+  setProcessingSteps, updateProcessingStep,
 } = chatSlice.actions;
 export default chatSlice.reducer;

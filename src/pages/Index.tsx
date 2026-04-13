@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box } from '@mui/material';
 import { ThemeProvider, CssBaseline } from '@mui/material';
-import { darkTheme } from '../theme';
+import { lightTheme } from '../theme';
 import { Provider } from 'react-redux';
 import { store } from '../store';
 import SessionSidebar from '../components/SessionSidebar';
@@ -13,7 +13,7 @@ const AppContent: React.FC = () => {
   const { pipelineStage, currentToolName, elapsedTime } = useAppSelector(s => s.chat);
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: '#1A1A1A' }}>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: '#FFFFFF' }}>
       <SessionSidebar />
       <ChatPanel />
       {pipelineStage !== 'idle' && (
@@ -25,7 +25,7 @@ const AppContent: React.FC = () => {
 
 const Index: React.FC = () => (
   <Provider store={store}>
-    <ThemeProvider theme={darkTheme}>
+    <ThemeProvider theme={lightTheme}>
       <CssBaseline />
       <AppContent />
     </ThemeProvider>
