@@ -1,27 +1,24 @@
 import { createTheme } from '@mui/material/styles';
 
-// Cursor AI-inspired dark theme
-export const darkTheme = createTheme({
+export const lightTheme = createTheme({
   palette: {
-    mode: 'dark',
-    primary: { main: '#007AFF', light: '#4DA3FF', dark: '#0055CC' },
-    secondary: { main: '#00D68F', light: '#33E0A8', dark: '#00A86B' },
-    background: { default: '#1A1A1A', paper: '#252525' },
-    error: { main: '#FF6B6B' },
-    warning: { main: '#FFB800' },
-    success: { main: '#00D68F' },
-    text: { primary: '#E8E8E8', secondary: '#808080', disabled: '#4A4A4A' },
-    divider: '#333333',
+    mode: 'light',
+    primary: { main: '#1976d2', light: '#42a5f5', dark: '#1565c0' },
+    secondary: { main: '#2e7d32', light: '#4caf50', dark: '#1b5e20' },
+    background: { default: '#FFFFFF', paper: '#F9FAFB' },
+    error: { main: '#d32f2f' },
+    warning: { main: '#ed6c02' },
+    success: { main: '#2e7d32' },
+    text: { primary: '#1a1a1a', secondary: '#666666', disabled: '#9e9e9e' },
+    divider: '#E5E7EB',
   },
   typography: {
-    fontFamily: '"SF Mono", "JetBrains Mono", "Fira Code", monospace',
-    h6: { fontFamily: '"Inter", -apple-system, sans-serif', fontWeight: 600 },
-    subtitle1: { fontFamily: '"Inter", -apple-system, sans-serif' },
-    subtitle2: { fontFamily: '"Inter", -apple-system, sans-serif', fontWeight: 500 },
-    body1: { fontFamily: '"Inter", -apple-system, sans-serif', fontSize: '0.875rem', lineHeight: 1.6 },
-    body2: { fontFamily: '"Inter", -apple-system, sans-serif', fontSize: '0.8rem' },
-    button: { fontFamily: '"Inter", -apple-system, sans-serif', textTransform: 'none', fontWeight: 500 },
-    caption: { fontFamily: '"Inter", -apple-system, sans-serif' },
+    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    h6: { fontWeight: 600 },
+    subtitle1: { fontWeight: 500 },
+    body1: { fontSize: '0.875rem', lineHeight: 1.6 },
+    body2: { fontSize: '0.8rem' },
+    button: { textTransform: 'none', fontWeight: 500 },
   },
   shape: { borderRadius: 8 },
   components: {
@@ -35,9 +32,9 @@ export const darkTheme = createTheme({
         root: { backgroundImage: 'none' },
       },
     },
-    MuiTooltip: {
+    MuiDialog: {
       styleOverrides: {
-        tooltip: { fontSize: '0.75rem', fontFamily: '"Inter", -apple-system, sans-serif', background: '#333', border: '1px solid #444' },
+        paper: { borderRadius: 12 },
       },
     },
   },
