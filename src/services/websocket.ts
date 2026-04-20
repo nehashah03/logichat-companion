@@ -40,6 +40,7 @@ export interface WsEvent {
   sources?: any[];
   citations?: any[];
   message?: string;
+  status?: 'running' | 'done' | 'error';
 }
 
 type Handler = (ev: WsEvent) => void;

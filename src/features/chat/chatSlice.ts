@@ -66,6 +66,7 @@ export interface PhaseEvent {
   startedAt: number;
   endedAt?: number;
   rawOutput?: string;     // raw tool output for power-user expansion
+  durationMs?: number;
 }
 
 export interface PipelinePhase {

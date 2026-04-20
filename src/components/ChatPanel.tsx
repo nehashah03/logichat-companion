@@ -191,7 +191,7 @@ const ChatPanel: React.FC = () => {
         px: 3, py: 1.25, borderBottom: '1px solid', borderColor: palette.border,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 48,
       }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 14, color: palette.textPrimary, noWrap: true }}>
+        <Typography noWrap sx={{ fontWeight: 600, fontSize: 14, color: palette.textPrimary }}>
           {activeTitle}
         </Typography>
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
