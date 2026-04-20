@@ -85,37 +85,38 @@ export const LIGHT: ThemePalette = {
 
 // ---------- MIDNIGHT BLUE (dark) ----------
 export const MIDNIGHT: ThemePalette = {
-  bgApp: '#0B1020',
-  bgSidebar: '#0F1730',
-  bgChat: '#0B1020',
-  bgInput: '#172041',
-  bgHover: 'rgba(255,255,255,0.06)',
-  bgSelected: 'rgba(96,165,250,0.18)',
-  bgUserBubble: '#1B2A55',
-  bgAssistantBubble: '#131C3A',
-  bgCodeHeader: '#0F1730',
-  bgCode: '#0A1126',
+  // Deep navy inspired by the reference dashboard screenshot
+  bgApp: '#070B1A',
+  bgSidebar: '#0A1024',
+  bgChat: '#070B1A',
+  bgInput: '#0F1733',
+  bgHover: 'rgba(96,165,250,0.08)',
+  bgSelected: 'rgba(96,165,250,0.16)',
+  bgUserBubble: '#142046',
+  bgAssistantBubble: '#0D1530',
+  bgCodeHeader: '#0C142C',
+  bgCode: '#060A18',
 
-  border: '#1E2A4A',
-  borderStrong: '#2A3A65',
+  border: 'rgba(96,165,250,0.14)',
+  borderStrong: 'rgba(96,165,250,0.28)',
 
-  textPrimary: '#E6EAF5',
+  textPrimary: '#EAEFFB',
   textSecondary: '#A6B0CF',
-  textMuted: '#6B7796',
-  textOnPrimary: '#0B1020',
+  textMuted: '#6A7494',
+  textOnPrimary: '#06091A',
 
-  primary: '#60A5FA',
-  primaryHover: '#3B82F6',
-  primarySoft: 'rgba(96,165,250,0.14)',
-  userAccent: '#60A5FA',
+  primary: '#3B82F6',
+  primaryHover: '#60A5FA',
+  primarySoft: 'rgba(59,130,246,0.16)',
+  userAccent: '#7DA8FF',
   assistantAccent: '#94A3B8',
 
-  success: '#4ADE80',
+  success: '#34D399',
   warning: '#FBBF24',
   error: '#F87171',
-  errorSoft: 'rgba(248,113,113,0.15)',
+  errorSoft: 'rgba(248,113,113,0.14)',
 
-  scrollbarThumb: '#2A3A65',
+  scrollbarThumb: 'rgba(96,165,250,0.25)',
   scrollbarTrack: 'transparent',
 };
 
