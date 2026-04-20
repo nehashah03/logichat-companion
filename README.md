@@ -1,401 +1,170 @@
-# AI Chat Interface — React + Material UI
+# LogicChat — Cursor-style AI Companion
 
-A production-ready React web application that mimics a modern AI chat interface (inspired by Cursor AI, ChatGPT, Amazon Q Business), designed for developers analyzing logs, tickets, and system outputs.
+A production-quality React + Material UI chat workspace for developers
+diagnosing logs, tickets and system outputs. Built around an explicit
+**Routing → Planning → Executing → Synthesizing** pipeline, with live
+tool-output reveals (Splunk, Jira, vector search…), source-grounded answers
+with hover-popover citations, and full markdown rendering.
 
----
-
-## 🎨 Design
-
-- **Light theme** — Clean white background (`#FFFFFF`), blue accent (`#1976d2`), green success (`#2e7d32`)
-- **Typography** — Inter for all UI text, SF Mono/JetBrains Mono for code blocks
-- **Material UI only** — No Tailwind CSS. All styling via MUI's `sx` prop and `createTheme`
-- **Minimal chrome** — Content-first layout, no unnecessary decorations
-
----
-
-## 🏗️ Architecture
-
-```
-src/
-├── components/
-│   ├── ChatPanel.tsx           # Main chat thread + message orchestration
-│   ├── ChatInput.tsx           # Input with auto-expand, file upload, scrollable textarea
-│   ├── MessageBubble.tsx       # Markdown rendering, code highlighting, copy, events/sources
-│   ├── SessionSidebar.tsx      # Conversation history with delete confirmation
-│   ├── StepTracker.tsx         # Right sidebar pipeline stage tracker
-│   ├── ProcessingSteps.tsx     # Inline processing steps (analyzing → generating)
-│   ├── EventsSourcesPanel.tsx  # Expandable Events & Sources after response
-│   └── TypingIndicator.tsx     # Animated thinking indicator
-├── features/
-│   ├── chat/chatSlice.ts       # Redux: messages, streaming, sources, citations, steps
-│   └── session/sessionSlice.ts # Redux: session CRUD, conversation history
-├── services/
-│   └── websocket.ts            # Mock WebSocket with processing steps simulation
-├── store/
-│   ├── index.ts                # Redux store configuration
-│   └── hooks.ts                # Typed useAppSelector/useAppDispatch
-├── utils/
-│   └── helpers.ts              # ID generation, formatting utilities
-├── pages/
-│   └── Index.tsx               # Root layout with MUI ThemeProvider
-└── theme.ts                    # MUI light theme configuration
-```
+> Inspired by Cursor AI / GPT / Lovable AI workflows: the assistant doesn't
+> just answer — it **shows its work** as it happens, and lets you replay
+> every step later.
 
 ---
 
 ## ✨ Features
 
-### Chat Thread
-- User & assistant message bubbles with distinct avatars (Person icon / Bot icon)
-- Timestamps with relative formatting ("Just now", "5m ago")
-- Auto-scroll on new messages
-- Smooth fade-in animation for new messages
-- **Copy button on ALL messages** (both user and assistant)
-- **Thumbs up/down** feedback buttons on assistant messages
-- Retry button on failed messages
+### Pipeline & live tool streaming
+- Four explicit phases — **Routing → Planning → Executing → Synthesizing** —
+  visible in the message bubble while the assistant is thinking.
+- Each phase contains one or more **events** (tool calls). For each event:
+  spinner, tool name (`splunk.search`, `vector.search`, `jira.query`),
+  live-streaming detail text, elapsed timer, and an expandable
+  **raw output** section for power users.
+- Active phase auto-expands; completed phases auto-collapse so you always
+  see the current step. The whole timeline is later available under a
+  collapsible **Events** panel on the finished message.
+- A **Stop** button in the header aborts the in-flight stream.
 
-### Smart Input Box
-- Single-line input by default, auto-expands as you type
-- **Scrollbar appears** when content exceeds max height (no special pasted content block — just scrollable like ChatGPT)
-- Shift+Enter for new line, Enter to send
-- Drag-and-drop file upload (PDF, DOCX, images up to 10MB)
-- **Image preview on click** — clicking an uploaded image opens a full-size preview dialog
+### Streaming chat
+- Token-by-token streaming over WebSocket, with a typing cursor.
+- Auto-scroll to latest content during streaming.
+- Full markdown: GFM tables, fenced code blocks with Prism syntax
+  highlighting + per-block copy button, blockquotes, lists, links, images.
+- Inline citations like `[1]` are rendered as clickable chips with a
+  hover-popover preview of the cited source.
 
-### How Tables Are Displayed
+### Input
+- Drag-and-drop **or** file picker for logs, PDFs, JSON, TXT, DOCX, images.
+- 10 MB combined upload limit with friendly snackbar errors and per-file
+  type validation.
+- Image attachments preview as thumbnails — click to open full-size.
+- **Long pastes (≥ 500 chars) auto-convert to a syntax-highlighted snippet
+  attachment** so the chat input stays clean. Language is auto-detected
+  (JSON / Python / JS / SQL / log / text).
 
-To render a table in the assistant response, the API/backend should return **standard Markdown table syntax**:
+### Sessions & sidebar
+- Per-session **rename / favorite / export / delete** via a 3-dot menu
+  (with a confirmation dialog before delete).
+- Export to **Markdown / Plain text / JSON**.
+- Search bar that filters by **title or message body**.
+- Favorites group pinned at the top.
+- Theme toggle is available in **both** the sidebar header and the chat
+  header.
 
-```markdown
-| Column 1 | Column 2 | Column 3 |
-|----------|----------|----------|
-| Value A  | Value B  | Value C  |
-| Value D  | Value E  | Value F  |
-```
+### Theming
+- Two themes defined entirely in
+  [`src/constants/themeColors.ts`](src/constants/themeColors.ts):
+  - **Light** — clean Material defaults.
+  - **Midnight Blue** — deep navy palette inspired by the dashboard
+    reference (bright #3B82F6 accent, near-black `#070B1A` background,
+    subtle blue-tinted borders).
+- Edit a single object in `themeColors.ts` to recolor the entire app.
 
-The `react-markdown` library with `remark-gfm` plugin automatically renders this as an HTML `<table>` with proper styling (borders, header background, padding).
-
-### How Code Blocks Are Displayed
-
-Return fenced code blocks with a language identifier:
-
-````markdown
-```bash
-echo "Hello World"
-```
-
-```python
-def analyze_logs(path: str):
-    with open(path) as f:
-        return f.read()
-```
-````
-
-Each code block renders with:
-- Syntax highlighting via Prism.js (`oneLight` theme for light mode)
-- Language label in the header
-- **Copy button** to copy the code content
-
-### Hyperlinks
-
-Standard markdown links render as clickable blue links:
-
-```markdown
-See the [PostgreSQL Documentation](https://www.postgresql.org/docs/) for more info.
-```
-
-### Inline Code
-
-Wrap with backticks: `` `variable_name` `` renders with a light gray background.
-
-### Blockquotes
-
-```markdown
-> **Note**: This is important information.
-```
-
-Renders with a blue left border and subtle background.
+### State
+- **Redux Toolkit** drives chat + session state.
+- Theme choice is the *only* thing persisted to `localStorage`
+  (per requirement). All chat data lives in Redux.
 
 ---
 
-## 🔄 Processing Steps (Streaming Pipeline)
+## 🖥️ Backend (dummy) — Python + FastAPI
 
-When a user sends a query, the system shows **real-time processing steps** (like Amazon Q Business / Cursor AI):
+A small FastAPI service that emits the same WebSocket events the UI
+consumes lives in [`backend/`](backend/). See
+[`backend/README.md`](backend/README.md) for run instructions and the full
+event protocol.
 
-1. **Analyzing your query** — Determining next steps
-2. **Searching your documents** — Looking up relevant passages
-3. **Extracting key details** — Processing document content
-4. **Generating a response** — Preparing the final answer
+For local development, the frontend ships with a **mock transport** that
+emits identical events directly in-process — so you can run the UI without
+the backend if you want.
 
-Each step shows:
-- ✅ Green checkmark when complete
-- 🔄 Spinning indicator when active
-- ○ Empty circle when pending
-
-These steps are **streamed in real-time** — each step transitions from pending → active → complete as the backend processes.
-
-### How to Implement with Real WebSocket Backend
-
-#### Backend (Node.js WebSocket Server)
-
-```javascript
-const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 8080 });
-
-wss.on('connection', (ws) => {
-  ws.on('message', async (data) => {
-    const { message, messageId } = JSON.parse(data);
-    
-    // Step 1: Analyzing
-    ws.send(JSON.stringify({
-      type: 'step',
-      messageId,
-      step: { id: 'step-1', label: 'Analyzing your query', description: 'Determining Next Steps', status: 'active' },
-      allSteps: [
-        { id: 'step-1', label: 'Analyzing your query', description: 'Determining Next Steps', status: 'active' },
-        { id: 'step-2', label: 'Searching your documents', description: 'Looking up', status: 'pending' },
-        { id: 'step-3', label: 'Extracting key details', description: 'Processing content', status: 'pending' },
-        { id: 'step-4', label: 'Generating a response', description: 'Preparing final response', status: 'pending' },
-      ]
-    }));
-    
-    // ... process query ...
-    await analyzeQuery(message);
-    
-    // Step 1 complete, Step 2 active
-    ws.send(JSON.stringify({
-      type: 'step',
-      messageId,
-      step: { id: 'step-1', label: 'Analyzing your query', description: 'Determining Next Steps', status: 'complete' },
-      allSteps: [
-        { id: 'step-1', label: 'Analyzing your query', status: 'complete' },
-        { id: 'step-2', label: 'Searching your documents', status: 'active' },
-        { id: 'step-3', label: 'Extracting key details', status: 'pending' },
-        { id: 'step-4', label: 'Generating a response', status: 'pending' },
-      ]
-    }));
-    
-    // Step 2: Search documents
-    const results = await searchDocuments(message);
-    
-    // Send progress details during search
-    ws.send(JSON.stringify({
-      type: 'progress',
-      messageId,
-      stage: 'searching',
-      detail: 'Found passages from 3 documents'
-    }));
-    
-    // ... continue through steps 3 and 4 ...
-    
-    // Stream response tokens
-    const response = await generateResponse(results);
-    for (const token of tokenize(response)) {
-      ws.send(JSON.stringify({
-        type: 'message',
-        subtype: 'token',
-        messageId,
-        token
-      }));
-      await sleep(10); // Small delay for streaming effect
-    }
-    
-    // Send sources and citations
-    ws.send(JSON.stringify({
-      type: 'message',
-      subtype: 'sources',
-      messageId,
-      sources: [
-        { name: 'document.pdf', url: '/files/document.pdf', snippet: 'Relevant excerpt...' }
-      ],
-      citations: [
-        { index: 1, text: 'Key finding from document', source: 'document.pdf' }
-      ]
-    }));
-    
-    // Complete
-    ws.send(JSON.stringify({ type: 'complete', messageId }));
-  });
-});
-```
-
-#### Frontend (React WebSocket Client)
-
-```javascript
-// src/services/websocket.ts
-class WebSocketService {
-  private ws: WebSocket | null = null;
-  private handlers = {};
-  private reconnectAttempts = 0;
-  private maxReconnect = 5;
-  
-  connect(url = 'ws://localhost:8080') {
-    this.ws = new WebSocket(url);
-    
-    this.ws.onopen = () => {
-      this.reconnectAttempts = 0;
-      console.log('Connected');
-    };
-    
-    this.ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      switch (data.type) {
-        case 'step':
-          this.handlers.step?.(data);
-          break;
-        case 'progress':
-          this.handlers.progress?.(data);
-          break;
-        case 'message':
-          this.handlers.message?.(data);
-          break;
-        case 'complete':
-          this.handlers.complete?.(data);
-          break;
-        case 'error':
-          this.handlers.error?.(data);
-          break;
-      }
-    };
-    
-    this.ws.onclose = () => {
-      if (this.reconnectAttempts < this.maxReconnect) {
-        this.reconnectAttempts++;
-        setTimeout(() => this.connect(url), 2000 * this.reconnectAttempts);
-      }
-    };
-  }
-  
-  send(message, messageId) {
-    this.ws?.send(JSON.stringify({ message, messageId }));
-  }
-  
-  on(event, handler) {
-    this.handlers[event] = handler;
-  }
-  
-  disconnect() {
-    this.ws?.close();
-  }
-}
-
-export const wsService = new WebSocketService();
-```
-
-### WebSocket Message Protocol
-
-| Type | Direction | Purpose |
-|------|-----------|---------|
-| `step` | Server → Client | Processing step status update (pending/active/complete) |
-| `progress` | Server → Client | Sub-step details (e.g., "Found 3 documents") |
-| `message` (token) | Server → Client | Single token for streaming response |
-| `message` (tool_output) | Server → Client | Tool execution result |
-| `message` (sources) | Server → Client | Source documents and citations |
-| `complete` | Server → Client | Response fully generated |
-| `error` | Server → Client | Error occurred |
-
----
-
-## 📎 Events & Sources Panel
-
-After the response is complete, two expandable buttons appear:
-
-### Events
-Shows all processing steps that occurred (same as the live pipeline, but as a historical record):
-- ✓ Analyzing your query — Determining Next Steps
-- ✓ Searching your documents — Looking up
-- ✓ Extracting key details — Processing document content  
-- ✓ Generating a response — Preparing a final response
-
-### Sources
-Shows the documents used to generate the response:
-- **Document name** (clickable link)
-- **Snippet** — excerpt from the document
-- **Citations** — numbered references linking parts of the answer to source documents
-
-Citations in the response text appear as `[1]`, `[2]` etc., and map to entries in the Sources panel.
-
----
-
-## 📋 Copy Functionality
-
-- **Copy code blocks** — Button in each code block header
-- **Copy full message** — Hover over any message (user or assistant) to see the copy button
-- Copies formatted text: `You:\n<content>` or `Assistant:\n<content>`
-- Shows a green "Copied to clipboard" snackbar
-
----
-
-## 📁 Session Management
-
-- **Sidebar** with conversation history list
-- **New Chat** button to start fresh
-- **Delete with confirmation** — Click trash icon → "Do you confirm? Yes / No" dialog
-- **No "Clear History"** button (removed as requested)
-- Auto-title from first user message
-
----
-
-## 🖼️ Image Handling
-
-- **Upload preview** — 80×80px thumbnails in input area before sending
-- **Click to preview** — Clicking an uploaded image opens a full-size dialog
-- **In-message preview** — Sent images shown in the message bubble (click to enlarge)
-- Non-image files show name + size chip
-
----
-
-## 📦 Expand/Collapse for Long Content
-
-- Assistant responses exceeding 800 chars or 20 lines get an **Expand/Collapse** toggle
-- When expanded, content has a **max-height with scrollbar** (500px) to prevent UI clutter
-- Tool output blocks are collapsible by default
-- Events and Sources panels are collapsed by default
-
----
-
-## 🔌 Dummy API (Mock WebSocket)
-
-The mock WebSocket service (`src/services/websocket.ts`) simulates:
-1. Processing steps streamed one at a time with realistic delays
-2. Sub-step progress details (e.g., search queries, document counts)
-3. Tool execution outputs (log_analyzer, metrics_query)
-4. Token-by-token response streaming with markdown content
-5. Sources and citations delivered after streaming completes
-6. Abort controller for cancellation
-
-To replace with a real API:
-1. Update `wsService` to use a real WebSocket connection (`new WebSocket('wss://your-api.com')`)
-2. Keep the same event handler pattern (`on('step', ...)`, `on('message', ...)`, etc.)
-3. Backend should follow the message protocol documented above
-
----
-
-## 🛠️ Tech Stack
-
-| Technology | Purpose |
-|-----------|---------|
-| React 18 + Vite 5 | UI framework + bundler |
-| TypeScript 5 | Type safety |
-| Redux Toolkit | Global state management |
-| Material UI v7 | Component library (all styling) |
-| react-markdown + remark-gfm | Markdown rendering |
-| react-syntax-highlighter (Prism) | Code block highlighting (oneLight theme) |
-| react-dropzone | File upload |
-| WebSocket (mock) | Real-time streaming simulation |
-
----
-
-## 🚀 Getting Started
+### Switching the frontend to the real backend
 
 ```bash
+echo 'VITE_WS_URL=ws://localhost:8000/ws/chat' > .env.local
+```
+
+Then in `src/services/websocket.ts`, swap `MockTransport` for a real
+WebSocket transport pointed at `import.meta.env.VITE_WS_URL`.
+
+---
+
+## 🧱 Architecture
+
+```
+src/
+├── components/
+│   ├── ChatPanel.tsx          ← header, message list, live pipeline anchor
+│   ├── ChatInput.tsx          ← drag-drop, paste-to-snippet, validation
+│   ├── MessageBubble.tsx      ← markdown + citations + per-message Events/Sources
+│   ├── PipelinePanel.tsx      ← live & recorded pipeline timeline
+│   ├── SourcesPanel.tsx       ← collapsible cited documents
+│   ├── CitationChip.tsx       ← inline [N] chips with popover preview
+│   └── SessionSidebar.tsx     ← search, favorites, per-chat menu
+├── features/
+│   ├── chat/chatSlice.ts      ← messages + live pipeline state
+│   └── session/sessionSlice.ts← sessions, rename, favorite, delete
+├── services/websocket.ts      ← MockTransport (swap for real WS in prod)
+├── contexts/ThemeModeContext  ← MUI theme provider + persistence
+├── constants/themeColors.ts   ← single source of truth for colors
+└── utils/
+    ├── helpers.ts             ← id, timestamp, file size formatters
+    └── sessionExport.ts       ← md / txt / json export
+
+backend/
+├── main.py                    ← FastAPI WS server emitting pipeline events
+└── requirements.txt
+```
+
+### WebSocket event types
+
+| type           | payload                                                   | meaning                                       |
+|----------------|-----------------------------------------------------------|-----------------------------------------------|
+| `phase_start`  | `{ phase, label, description }`                            | a pipeline phase begins                       |
+| `phase_event`  | `{ phase, eventId, label, toolName? }`                     | a tool / sub-step starts inside a phase       |
+| `event_chunk`  | `{ phase, eventId, chunk }`                                | streamed text from the running tool           |
+| `event_done`   | `{ phase, eventId, durationMs, rawOutput? }`               | the tool finished                             |
+| `phase_done`   | `{ phase }`                                                | the phase finished                            |
+| `token`        | `{ text }`                                                 | a chunk of the assistant's final answer       |
+| `sources`      | `{ sources: [...], citations: [...] }`                     | bibliography + numbered citations             |
+| `done`         | `{}`                                                       | end of turn                                   |
+| `error`        | `{ message }`                                              | terminal error                                |
+
+---
+
+## 🔐 Security
+
+- All inbound messages on the backend are validated by `pydantic` with
+  hard length limits (`content` ≤ 8 000 chars, attachment metadata
+  ≤ 10 MB).
+- The frontend enforces type allow-list and 10 MB combined attachment
+  size *before* sending and shows friendly snackbar errors on rejection.
+- Per-connection **rate limit** (30 msg/min) on the backend.
+- CORS allow-list, no credentials.
+- The dummy backend never reads attachment bytes — metadata only.
+- No content or PII is ever written to logs.
+
+---
+
+## 🚀 Run
+
+```bash
+# Frontend
 npm install
-npm run dev
-```
+npm run dev          # http://localhost:8080
 
-Open [http://localhost:5173](http://localhost:5173) — type a question to see the full streaming response flow with processing steps, events, sources, and citations.
+# Backend (optional — UI works standalone with MockTransport)
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
 
 ---
 
-## 📤 Export
+## ⌨️ Tech stack
 
-Export conversation as `.txt` file via the "Export" button in the header. Includes timestamps and role labels.
+React 18 · Vite 5 · TypeScript · Material UI 7 · Redux Toolkit ·
+react-markdown + remark-gfm · react-syntax-highlighter (Prism) ·
+react-dropzone · FastAPI · Pydantic 2.
