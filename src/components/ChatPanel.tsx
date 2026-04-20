@@ -228,21 +228,26 @@ const ChatPanel: React.FC = () => {
           </Box>
         )}
 
-        {messages.map(msg => (
-          <MessageBubble
-            key={msg.id} message={msg}
-            onRetry={msg.status === 'error' ? () => handleSend(messages[messages.length - 2]?.content || '', []) : undefined}
-          />
-        ))}
-
-        {/* Live pipeline (rendered alongside the streaming assistant bubble) */}
-        {showLivePipeline && (
-          <Box sx={{ display: 'flex', mb: 2, pl: { xs: 0, md: 5.5 } }}>
-            <Box sx={{ width: { xs: '100%', md: '70%' }, maxWidth: '70%' }}>
-              <PipelinePanel phases={livePipeline} live compact />
-            </Box>
-          </Box>
-        )}
+        {messages.map((msg, i) => {
+          const isLastAssistant = i === messages.length - 1 && msg.role === 'assistant';
+          const isLiveBubble = isLastAssistant && isStreaming && msg.id === liveAssistantId;
+          // While streaming AND no tokens have arrived yet → show ONLY the live pipeline in place of the empty bubble.
+          if (isLiveBubble && msg.content.length === 0) {
+            return (
+              <Box key={msg.id} sx={{ display: 'flex', mb: 2, pl: { xs: 0, md: 5.5 } }}>
+                <Box sx={{ width: { xs: '100%', md: '70%' }, maxWidth: '70%' }}>
+                  <PipelinePanel phases={livePipeline} live compact />
+                </Box>
+              </Box>
+            );
+          }
+          return (
+            <MessageBubble
+              key={msg.id} message={msg}
+              onRetry={msg.status === 'error' ? () => handleSend(messages[messages.length - 2]?.content || '', []) : undefined}
+            />
+          );
+        })}
       </Box>
 
       <Snackbar open={!!error} autoHideDuration={5000} onClose={() => dispatch(setError(null))}>
