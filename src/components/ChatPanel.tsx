@@ -180,8 +180,6 @@ const ChatPanel: React.FC = () => {
   const livePipelineRef = useRef(livePipeline);
   useEffect(() => { livePipelineRef.current = livePipeline; }, [livePipeline]);
 
-  const lastMsg = messages[messages.length - 1];
-  const showLivePipeline = isStreaming && livePipeline.length > 0 && lastMsg?.role === 'assistant';
   const activeTitle = sessions.find(s => s.id === activeSessionId)?.title || 'New Conversation';
 
   return (
