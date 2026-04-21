@@ -19,6 +19,7 @@ import type { ChatMessage } from '../features/chat/chatSlice';
 import PipelinePanel from './PipelinePanel';
 import SourcesPanel from './SourcesPanel';
 import CitationChip from './CitationChip';
+import InteractiveTable from './InteractiveTable';
 import { useThemeMode } from '../contexts/ThemeModeContext';
 
 interface Props {
@@ -200,6 +201,9 @@ const MessageBubble: React.FC<Props> = ({ message, onRetry }) => {
                         color: palette.primary,
                       }} {...props}>{children}</code>
                     );
+                  },
+                  table({ children }) {
+                    return <InteractiveTable>{children}</InteractiveTable>;
                   },
                   // Replace inline citations [N] inside text with hover chips
                   p({ children }) {
