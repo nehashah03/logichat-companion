@@ -1,118 +1,109 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { Box, Typography, Alert, Snackbar, IconButton, Tooltip, Button } from '@mui/material';
+/**
+ * ChatPanel — orchestrates the active session's chat view.
+ *
+ * Responsibilities:
+ *  - Connect to the WebSocket once on mount.
+ *  - On session change: fetch full message history from the backend.
+ *  - On send: push a user message into Redux, register a per-session WS
+ *    handler, and dispatch every backend event to the per-session
+ *    pipeline + message reducers.
+ *  - On Stop: send a `cancel` frame for the active turn (per-session).
+ *
+ * Multiple sessions can stream simultaneously — each session has its own
+ * `liveBySession[sid]` slot in chatSlice, and the WS service routes
+ * incoming events by `sessionId` so the panels never collide.
+ */
+import React, { useCallback, useEffect, useRef, useMemo } from 'react';
+import { Box, Typography, Alert, Snackbar, IconButton, Tooltip, Chip } from '@mui/material';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
-import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
+
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
-  addMessage, appendToMessage, setMessageStatus, setStreaming, setPipelineStage,
-  setElapsedTime, setError, setMessageSources, setMessagePipeline,
-  initLivePipeline, setPhaseStatus, addPhaseEvent, updatePhaseEvent,
-  appendPhaseEventDetail, clearLivePipeline,
+  setMessages, addMessage, appendToken, setMessageStatus,
+  setMessageSources, setMessagePipeline,
+  initLive, setPhaseStatus, addPhaseEvent, appendPhaseEventDetail,
+  updatePhaseEvent, clearLive, setLiveStreaming, setError,
 } from '../features/chat/chatSlice';
-import { createSession, updateSessionMessages } from '../features/session/sessionSlice';
+import type { FileAttachment, PasteSnippet, PipelinePhase, ChatMessage } from '../features/chat/chatSlice';
+import { touchSession, fetchSessions } from '../features/session/sessionSlice';
 import { wsService, WsEvent, PhaseKey } from '../services/websocket';
+import { api } from '../services/api';
 import { generateId } from '../utils/helpers';
+import { useThemeMode } from '../contexts/ThemeModeContext';
 import MessageBubble from './MessageBubble';
 import ChatInput from './ChatInput';
 import PipelinePanel from './PipelinePanel';
-import { useThemeMode } from '../contexts/ThemeModeContext';
-import type { FileAttachment, PipelinePhase } from '../features/chat/chatSlice';
 
+// Pipeline scaffolding — labels only. The *content* of each phase
+// (events, tool names, raw output) comes from the backend.
 const PHASE_DEFS: { key: PhaseKey; label: string; description: string }[] = [
   { key: 'routing',      label: 'Routing',       description: 'Classifying intent & selecting tools' },
   { key: 'planning',     label: 'Planning',      description: 'Building the execution plan' },
-  { key: 'executing',    label: 'Executing',     description: 'Running tools (Splunk, Jira, vector search…)' },
+  { key: 'executing',    label: 'Executing',     description: 'Running tools' },
   { key: 'synthesizing', label: 'Synthesizing',  description: 'Composing the final response' },
 ];
 
 const ChatPanel: React.FC = () => {
   const dispatch = useAppDispatch();
   const { palette, mode, toggle } = useThemeMode();
-  const { messages, isStreaming, error, livePipeline, liveAssistantId } = useAppSelector(s => s.chat);
   const { activeSessionId, sessions } = useAppSelector(s => s.session);
+  const { messagesBySession, liveBySession, error } = useAppSelector(s => s.chat);
+
+  const messages: ChatMessage[] = activeSessionId ? (messagesBySession[activeSessionId] || []) : [];
+  const live = activeSessionId ? liveBySession[activeSessionId] : undefined;
+  const isStreaming = !!live?.isStreaming;
+  const liveAssistantId = live?.assistantMessageId;
+  const livePipeline = live?.pipeline || [];
+
   const scrollRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef(0);
 
-  // Auto-scroll on every render that mutates the conversation or live pipeline
+  // Connect WS once
   useEffect(() => {
-    if (!scrollRef.current) return;
-    const el = scrollRef.current;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages, livePipeline, isStreaming]);
-
-  useEffect(() => { wsService.connect(); return () => wsService.disconnect(); }, []);
-
-  // Persist messages to active session
-  useEffect(() => {
-    if (activeSessionId && messages.length > 0) {
-      dispatch(updateSessionMessages({ id: activeSessionId, messages: [...messages] }));
-    }
-  }, [messages, activeSessionId, dispatch]);
-
-  const startTimer = useCallback(() => {
-    startTimeRef.current = Date.now();
-    timerRef.current = setInterval(() => {
-      dispatch(setElapsedTime(Date.now() - startTimeRef.current));
-    }, 200);
-  }, [dispatch]);
-
-  const stopTimer = useCallback(() => {
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    wsService.connect();
+    return () => wsService.disconnect();
   }, []);
 
-  const handleStop = useCallback(() => {
-    wsService.abort();
-    if (liveAssistantId) {
-      dispatch(setMessageStatus({ id: liveAssistantId, status: 'complete' }));
-    }
-    dispatch(setStreaming(false));
-    dispatch(setPipelineStage('idle'));
-    dispatch(clearLivePipeline());
-    stopTimer();
-  }, [dispatch, liveAssistantId, stopTimer]);
+  // Fetch messages on session change
+  useEffect(() => {
+    if (!activeSessionId) return;
+    if (messagesBySession[activeSessionId]) return; // cached
+    let cancelled = false;
+    (async () => {
+      try {
+        const full = await api.getSession(activeSessionId);
+        if (!cancelled) dispatch(setMessages({ sessionId: activeSessionId, messages: full.messages || [] }));
+      } catch (e: any) {
+        if (!cancelled) dispatch(setError(`Failed to load chat: ${e.message}`));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeSessionId, dispatch, messagesBySession]);
 
-  const handleSend = useCallback(async (content: string, attachments: FileAttachment[]) => {
-    let sessionId = activeSessionId;
-    if (!sessionId) {
-      sessionId = generateId();
-      dispatch(createSession({
-        id: sessionId, title: content.slice(0, 50) || 'New Conversation',
-        createdAt: Date.now(), updatedAt: Date.now(), messages: [],
-      }));
-    }
+  // Auto-scroll on message / live changes
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [messages.length, livePipeline.length, isStreaming, live?.pipeline?.[live.pipeline.length - 1]?.events?.length]);
 
-    dispatch(addMessage({
-      id: generateId(), role: 'user', content, timestamp: Date.now(),
-      status: 'complete', attachments,
-    }));
+  // ---------- Per-session handler (created on send) ----------
+  const buildHandler = useCallback((sessionId: string, turnId: string, assistantId: string) => {
+    const livePipelineRef: { current: PipelinePhase[] } = { current: [] };
 
-    const assistantId = generateId();
-    dispatch(addMessage({
-      id: assistantId, role: 'assistant', content: '', timestamp: Date.now(), status: 'streaming',
-    }));
+    const handler = (ev: WsEvent) => {
+      // Defensive: ignore frames from a different turn (e.g. late arrivals
+      // after we cancelled and started a new one in the same session).
+      if (ev.turnId && ev.turnId !== turnId) return;
 
-    const initialPhases: PipelinePhase[] = PHASE_DEFS.map(p => ({
-      ...p, status: 'pending', events: [],
-    }));
-    dispatch(initLivePipeline({ assistantId, phases: initialPhases }));
-    dispatch(setStreaming(true));
-    dispatch(setPipelineStage('routing'));
-    startTimer();
-
-    const off = wsService.on((ev: WsEvent) => {
       switch (ev.type) {
         case 'phase_start':
-          if (ev.phase) {
-            dispatch(setPhaseStatus({ phaseKey: ev.phase, status: 'active' }));
-            dispatch(setPipelineStage(ev.phase));
-          }
+          if (ev.phase) dispatch(setPhaseStatus({ sessionId, phaseKey: ev.phase, status: 'active' }));
           break;
         case 'phase_event':
           if (ev.phase && ev.eventId) {
             dispatch(addPhaseEvent({
-              phaseKey: ev.phase,
+              sessionId, phaseKey: ev.phase,
               event: {
                 id: ev.eventId, label: ev.label || 'Step', toolName: ev.toolName,
                 status: 'running', startedAt: Date.now(), detail: '',
@@ -122,65 +113,121 @@ const ChatPanel: React.FC = () => {
           break;
         case 'event_chunk':
           if (ev.phase && ev.eventId && ev.chunk) {
-            dispatch(appendPhaseEventDetail({ phaseKey: ev.phase, eventId: ev.eventId, chunk: ev.chunk }));
+            dispatch(appendPhaseEventDetail({
+              sessionId, phaseKey: ev.phase, eventId: ev.eventId, chunk: ev.chunk,
+            }));
           }
           break;
         case 'event_done':
           if (ev.phase && ev.eventId) {
             dispatch(updatePhaseEvent({
-              phaseKey: ev.phase, eventId: ev.eventId,
+              sessionId, phaseKey: ev.phase, eventId: ev.eventId,
               patch: { status: 'done', endedAt: Date.now(), durationMs: ev.durationMs, rawOutput: ev.rawOutput },
             }));
           }
           break;
         case 'phase_done':
-          if (ev.phase) dispatch(setPhaseStatus({ phaseKey: ev.phase, status: 'complete' }));
+          if (ev.phase) dispatch(setPhaseStatus({ sessionId, phaseKey: ev.phase, status: 'complete' }));
           break;
         case 'token':
-          if (ev.text) {
-            dispatch(setPipelineStage('streaming'));
-            dispatch(appendToMessage({ id: assistantId, token: ev.text }));
-          }
+          if (ev.text) dispatch(appendToken({ sessionId, messageId: assistantId, token: ev.text }));
           break;
         case 'sources':
           dispatch(setMessageSources({
-            messageId: assistantId,
-            sources: ev.sources || [],
-            citations: ev.citations || [],
+            sessionId, messageId: assistantId,
+            sources: ev.sources || [], citations: ev.citations || [],
           }));
           break;
-        case 'done': {
-          // snapshot the live pipeline into the message for permanent display
-          const snapshot = livePipelineRef.current;
-          dispatch(setMessagePipeline({ messageId: assistantId, pipeline: snapshot }));
-          dispatch(setMessageStatus({ id: assistantId, status: 'complete' }));
-          dispatch(setStreaming(false));
-          dispatch(setPipelineStage('complete'));
-          stopTimer();
-          setTimeout(() => { dispatch(clearLivePipeline()); dispatch(setPipelineStage('idle')); }, 600);
+        case 'cancelled':
+          dispatch(setMessageStatus({ sessionId, messageId: assistantId, status: 'cancelled' }));
+          break;
+        case 'done':
+        case 'error': {
+          // Snapshot the *current* live pipeline into the message so the
+          // user can review it later under "Events".
+          const snapshot = (livePipelineRef.current.length
+            ? livePipelineRef.current
+            : []) as PipelinePhase[];
+          dispatch(setMessagePipeline({ sessionId, messageId: assistantId, pipeline: snapshot }));
+          dispatch(setMessageStatus({
+            sessionId, messageId: assistantId,
+            status: ev.type === 'error' ? 'error' : 'complete',
+          }));
+          dispatch(setLiveStreaming({ sessionId, isStreaming: false }));
+          // Brief delay so the "complete" state is visible before collapsing
+          setTimeout(() => dispatch(clearLive({ sessionId })), 350);
           off();
+          if (ev.type === 'error') dispatch(setError(ev.message || 'Stream error'));
+          // Refresh sidebar metadata (title may have auto-updated server-side)
+          dispatch(fetchSessions());
           break;
         }
-        case 'error':
-          dispatch(setMessageStatus({ id: assistantId, status: 'error' }));
-          dispatch(setError(ev.message || 'Stream error'));
-          dispatch(setStreaming(false));
-          dispatch(setPipelineStage('idle'));
-          dispatch(clearLivePipeline());
-          stopTimer();
-          off();
-          break;
       }
+    };
+
+    const off = wsService.on(sessionId, handler);
+
+    // Track latest pipeline so we can snapshot it at done/error
+    return { handler, livePipelineRef, off };
+  }, [dispatch]);
+
+  // ---------- Send ----------
+  const handleSend = useCallback(async (content: string, attachments: FileAttachment[], snippets: PasteSnippet[]) => {
+    if (!activeSessionId) return;
+    const sessionId = activeSessionId;
+    const turnId = generateId();
+    const userMsg: ChatMessage = {
+      id: generateId(), role: 'user', content,
+      timestamp: Date.now(), status: 'complete',
+      attachments, pasteSnippets: snippets,
+    };
+    dispatch(addMessage({ sessionId, message: userMsg }));
+
+    const assistantId = generateId();
+    dispatch(addMessage({
+      sessionId,
+      message: { id: assistantId, role: 'assistant', content: '', timestamp: Date.now(), status: 'streaming' },
+    }));
+
+    const initialPhases: PipelinePhase[] = PHASE_DEFS.map(p => ({ ...p, status: 'pending', events: [] }));
+    dispatch(initLive({ sessionId, turnId, assistantMessageId: assistantId, phases: initialPhases }));
+
+    // Optimistic sidebar bump
+    dispatch(touchSession({ id: sessionId, preview: content.slice(0, 120) }));
+
+    buildHandler(sessionId, turnId, assistantId);
+
+    wsService.send({
+      sessionId, turnId, content,
+      attachments, snippets,
     });
+  }, [activeSessionId, dispatch, buildHandler]);
 
-    wsService.send({ content, attachments });
-  }, [activeSessionId, dispatch, startTimer, stopTimer]);
+  // Track latest pipeline in a ref for snapshotting (must mirror Redux)
+  // We attach this via a separate effect that watches `live`.
+  const liveRef = useRef(live);
+  useEffect(() => { liveRef.current = live; }, [live]);
 
-  // Mutable ref to current livePipeline (for snapshotting on 'done')
-  const livePipelineRef = useRef(livePipeline);
-  useEffect(() => { livePipelineRef.current = livePipeline; }, [livePipeline]);
+  const handleStop = useCallback(() => {
+    if (!activeSessionId || !live) return;
+    wsService.cancel(live.turnId);
+  }, [activeSessionId, live]);
 
-  const activeTitle = sessions.find(s => s.id === activeSessionId)?.title || 'New Conversation';
+  const activeSession = useMemo(
+    () => sessions.find(s => s.id === activeSessionId),
+    [sessions, activeSessionId],
+  );
+
+  // Empty state when no session selected
+  if (!activeSessionId) {
+    return (
+      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: palette.bgChat }}>
+        <Typography sx={{ color: palette.textMuted, fontSize: 14 }}>
+          Click “New chat” to get started.
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', minWidth: 0, bgcolor: palette.bgChat }}>
@@ -189,24 +236,25 @@ const ChatPanel: React.FC = () => {
         px: 3, py: 1.25, borderBottom: '1px solid', borderColor: palette.border,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 48,
       }}>
-        <Typography noWrap sx={{ fontWeight: 600, fontSize: 14, color: palette.textPrimary }}>
-          {activeTitle}
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          <Typography noWrap sx={{ fontWeight: 600, fontSize: 14, color: palette.textPrimary }}>
+            {activeSession?.title || 'Conversation'}
+          </Typography>
           {isStreaming && (
-            <Button
-              size="small" startIcon={<StopCircleOutlinedIcon />} onClick={handleStop}
-              sx={{ color: palette.error, fontSize: 12, textTransform: 'none' }}
-            >
-              Stop
-            </Button>
+            <Chip
+              size="small" label="Streaming"
+              sx={{
+                height: 20, fontSize: 10.5, fontWeight: 600,
+                bgcolor: palette.primarySoft, color: palette.primary,
+              }}
+            />
           )}
-          <Tooltip title={`Switch to ${mode === 'light' ? 'Midnight' : 'Light'}`}>
-            <IconButton size="small" onClick={toggle} sx={{ color: palette.textSecondary }}>
-              {mode === 'light' ? <DarkModeOutlinedIcon sx={{ fontSize: 18 }} /> : <LightModeOutlinedIcon sx={{ fontSize: 18 }} />}
-            </IconButton>
-          </Tooltip>
         </Box>
+        <Tooltip title={`Switch to ${mode === 'light' ? 'Midnight' : 'Light'}`}>
+          <IconButton size="small" onClick={toggle} sx={{ color: palette.textSecondary }}>
+            {mode === 'light' ? <DarkModeOutlinedIcon sx={{ fontSize: 18 }} /> : <LightModeOutlinedIcon sx={{ fontSize: 18 }} />}
+          </IconButton>
+        </Tooltip>
       </Box>
 
       {/* Messages */}
@@ -215,7 +263,7 @@ const ChatPanel: React.FC = () => {
         '&::-webkit-scrollbar': { width: 8 },
         '&::-webkit-scrollbar-thumb': { background: palette.scrollbarThumb, borderRadius: 4 },
       }}>
-        {messages.length === 0 && (
+        {messages.length === 0 && !isStreaming && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 2 }}>
             <Typography sx={{ fontSize: 22, fontWeight: 700, color: palette.textPrimary }}>
               What can I help you with?
@@ -229,7 +277,7 @@ const ChatPanel: React.FC = () => {
         {messages.map((msg, i) => {
           const isLastAssistant = i === messages.length - 1 && msg.role === 'assistant';
           const isLiveBubble = isLastAssistant && isStreaming && msg.id === liveAssistantId;
-          // While streaming AND no tokens have arrived yet → show ONLY the live pipeline in place of the empty bubble.
+          // While streaming AND no tokens yet → show ONLY the live pipeline.
           if (isLiveBubble && msg.content.length === 0) {
             return (
               <Box key={msg.id} sx={{ display: 'flex', mb: 2, pl: { xs: 0, md: 5.5 } }}>
@@ -239,12 +287,7 @@ const ChatPanel: React.FC = () => {
               </Box>
             );
           }
-          return (
-            <MessageBubble
-              key={msg.id} message={msg}
-              onRetry={msg.status === 'error' ? () => handleSend(messages[messages.length - 2]?.content || '', []) : undefined}
-            />
-          );
+          return <MessageBubble key={msg.id} message={msg} />;
         })}
       </Box>
 
@@ -252,7 +295,11 @@ const ChatPanel: React.FC = () => {
         <Alert severity="error" onClose={() => dispatch(setError(null))}>{error}</Alert>
       </Snackbar>
 
-      <ChatInput onSend={handleSend} disabled={isStreaming} />
+      <ChatInput
+        onSend={handleSend}
+        onStop={handleStop}
+        isStreaming={isStreaming}
+      />
     </Box>
   );
 };

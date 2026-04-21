@@ -1,77 +1,72 @@
 """
-Dummy LogicChat backend.
+LogicChat dummy backend.
 
-A small FastAPI app that exposes:
+FastAPI app providing:
 
-    POST /api/sessions                 → create a session
-    GET  /api/sessions/{id}/messages   → load history (JSON)
-    GET  /api/health
-    WS   /ws/chat                      → bidirectional chat with pipeline events
+    REST   POST   /api/sessions                  create
+           GET    /api/sessions                   list (lightweight metadata)
+           GET    /api/sessions/{id}              full session (messages)
+           PATCH  /api/sessions/{id}              rename / favorite
+           DELETE /api/sessions/{id}              delete
+           GET    /api/sessions/{id}/export?fmt=  download as md|txt|json
+           GET    /api/search?q=                  search title + bodies
+           GET    /api/health                     liveness
+    WS     /ws/chat                               bidirectional streaming
 
-The WebSocket protocol is identical to the one consumed by the frontend
-(`src/services/websocket.ts`). Replace the `MockTransport` in the frontend
-with a real WebSocket client pointed at `VITE_WS_URL=ws://localhost:8000/ws/chat`
-to run end-to-end against this backend.
+Per-session task isolation
+--------------------------
+Each WebSocket message starts an independent ``asyncio.Task`` keyed by
+(connection_id, sessionId, turnId).  A second message arriving for a
+*different* session does not block the first; sending another message in
+the *same* session politely cancels the prior turn for that session.
+The client can also send ``{"type":"cancel","turnId":...}`` to stop a
+specific turn (the Stop button).
 
-----------------------------------------------------------------------
-Run locally:
-
-    cd backend
-    pip install -r requirements.txt
-    uvicorn main:app --reload --port 8000
-----------------------------------------------------------------------
-
-Security notes baked into this dummy:
-- Pydantic models validate every inbound payload (length-bounded strings).
-- Per-connection rate limit (max N messages / minute).
-- CORS is restricted to the dev origin (override via ALLOWED_ORIGINS).
-- Attachments are accepted as metadata only — the dummy never reads bytes.
-- No secrets or PII are logged. Only event types are printed.
+Security
+--------
+- Pydantic validates every payload (length-bounded).
+- Session IDs are UUID-4 only (regex enforced) → safe filenames, no
+  path traversal.
+- Per-connection sliding-window rate limit (30 messages / minute).
+- CORS origin allow-list controlled by ``ALLOWED_ORIGINS`` env var.
+- Attachments are accepted as metadata only (the dummy never reads bytes).
+- Logs never contain user content or PII.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 import uuid
-from typing import Any, Optional
+from contextlib import suppress
+from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, ValidationError
+from fastapi.responses import PlainTextResponse, Response
+from pydantic import ValidationError
 
+from . import pipeline, storage
+from .schemas import (
+    CancelPayload, ChatPayload, CreateSessionPayload, PatchSessionPayload,
+    assert_uuid,
+)
 
 # --------------------------------------------------------------------------
 # Config
 # --------------------------------------------------------------------------
-ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:8080,http://localhost:5173").split(",")
-MAX_MSG_LEN = 8000
-MAX_ATTACHMENT_TOTAL_MB = 10
-RATE_LIMIT_PER_MIN = 30
+ALLOWED_ORIGINS = os.environ.get(
+    "ALLOWED_ORIGINS",
+    "http://localhost:8080,http://localhost:5173,http://127.0.0.1:8080",
+).split(",")
+RATE_LIMIT_PER_MIN = int(os.environ.get("RATE_LIMIT_PER_MIN", "30"))
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("logicchat")
 
-# --------------------------------------------------------------------------
-# Schemas
-# --------------------------------------------------------------------------
-class AttachmentMeta(BaseModel):
-    name: str = Field(..., max_length=200)
-    size: int = Field(..., ge=0, le=MAX_ATTACHMENT_TOTAL_MB * 1024 * 1024)
-    type: str = Field(default="", max_length=120)
-
-
-class ChatPayload(BaseModel):
-    content: str = Field(..., max_length=MAX_MSG_LEN)
-    attachments: list[AttachmentMeta] = Field(default_factory=list)
-
-
-# --------------------------------------------------------------------------
-# In-memory store (replace with DB in production)
-# --------------------------------------------------------------------------
-SESSIONS: dict[str, dict] = {}
-
-
-app = FastAPI(title="LogicChat dummy backend", version="0.1.0")
+app = FastAPI(title="LogicChat backend", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -81,202 +76,278 @@ app.add_middleware(
 )
 
 
+# --------------------------------------------------------------------------
+# REST
+# --------------------------------------------------------------------------
 @app.get("/api/health")
 async def health() -> dict:
     return {"ok": True, "ts": time.time()}
 
 
 @app.post("/api/sessions")
-async def create_session() -> dict:
+async def create_session(body: CreateSessionPayload | None = None) -> dict:
     sid = str(uuid.uuid4())
-    SESSIONS[sid] = {"id": sid, "created": time.time(), "messages": []}
-    return SESSIONS[sid]
+    title = (body.title if body else None) or "New Conversation"
+    return await storage.create_session(sid, title=title)
 
 
-@app.get("/api/sessions/{sid}/messages")
-async def get_messages(sid: str) -> dict:
-    if sid not in SESSIONS:
-        raise HTTPException(404, "session not found")
-    return {"messages": SESSIONS[sid]["messages"]}
+@app.get("/api/sessions")
+async def list_sessions() -> dict:
+    return {"sessions": await storage.list_sessions()}
+
+
+@app.get("/api/sessions/{sid}")
+async def get_session(sid: str) -> dict:
+    try:
+        assert_uuid(sid)
+    except ValueError:
+        raise HTTPException(400, "invalid id")
+    s = await storage.get_session(sid)
+    if s is None:
+        raise HTTPException(404, "not found")
+    return s
+
+
+@app.patch("/api/sessions/{sid}")
+async def patch_session(sid: str, body: PatchSessionPayload) -> dict:
+    try:
+        assert_uuid(sid)
+    except ValueError:
+        raise HTTPException(400, "invalid id")
+    s = await storage.patch_session(sid, title=body.title, favorite=body.favorite)
+    if s is None:
+        raise HTTPException(404, "not found")
+    return s
+
+
+@app.delete("/api/sessions/{sid}")
+async def delete_session(sid: str) -> dict:
+    try:
+        assert_uuid(sid)
+    except ValueError:
+        raise HTTPException(400, "invalid id")
+    ok = await storage.delete_session(sid)
+    if not ok:
+        raise HTTPException(404, "not found")
+    return {"ok": True}
+
+
+@app.get("/api/search")
+async def search(q: str = Query(default="", max_length=200)) -> dict:
+    return {"sessions": await storage.search(q)}
+
+
+def _format_export(session: dict, fmt: str) -> tuple[str, str, str]:
+    """Return (body, mime, extension)."""
+    if fmt == "json":
+        return json.dumps(session, ensure_ascii=False, indent=2), "application/json", "json"
+    title = session.get("title") or "conversation"
+    if fmt == "md":
+        out = [f"# {title}", ""]
+        for m in session.get("messages", []):
+            who = "You" if m.get("role") == "user" else "Assistant"
+            out.append(f"## {who}")
+            out.append(m.get("content") or "")
+            atts = m.get("attachments") or []
+            if atts:
+                out.append("")
+                out.append("**Attachments:** " + ", ".join(a.get("name", "") for a in atts))
+            out.append("")
+        return "\n".join(out), "text/markdown", "md"
+    # default: plain text
+    out = [title, "=" * len(title), ""]
+    for m in session.get("messages", []):
+        who = "You" if m.get("role") == "user" else "Assistant"
+        out.append(f"[{who}] {time.strftime('%Y-%m-%d %H:%M', time.localtime(m.get('timestamp', 0) / 1000))}")
+        out.append(m.get("content") or "")
+        out.append("")
+    return "\n".join(out), "text/plain", "txt"
+
+
+@app.get("/api/sessions/{sid}/export")
+async def export_session(sid: str, fmt: str = Query(default="md", pattern="^(md|txt|json)$")):
+    try:
+        assert_uuid(sid)
+    except ValueError:
+        raise HTTPException(400, "invalid id")
+    s = await storage.get_session(sid)
+    if s is None:
+        raise HTTPException(404, "not found")
+    body, mime, ext = _format_export(s, fmt)
+    safe = "".join(c for c in (s.get("title") or "conversation") if c.isalnum() or c in "-_ ")[:60].strip() or "conversation"
+    return Response(
+        content=body,
+        media_type=mime,
+        headers={"Content-Disposition": f'attachment; filename="{safe}.{ext}"'},
+    )
 
 
 # --------------------------------------------------------------------------
-# Pipeline simulation
+# WebSocket
 # --------------------------------------------------------------------------
-SPLUNK_REVEAL = [
-    "index=app_logs sourcetype=auth_service ERROR",
-    "  → 14,232 events scanned",
-    "  → 47 OOM warnings detected",
-    "  → memory.rss avg=2.1GB peak=4.4GB",
-]
-VECTOR_REVEAL = [
-    "embedding query → 1536-d vector",
-    "top-k=8 over 12,448 chunks",
-    "matched: system_logs_march_2024.pdf (p.12)",
-    "matched: performance_metrics_report.docx (p.4)",
-]
-JIRA_REVEAL = [
-    "project=OPS AND status!=Done AND label=auth-svc",
-    "  → INC-1042 \"Auth pod OOMKilled\"",
-    "  → INC-1057 \"Connection pool errors during peak\"",
-]
+class Connection:
+    """One websocket = one Connection. Holds running tasks per turnId."""
 
-FINAL_RESPONSE = """## Analysis Complete
+    def __init__(self, ws: WebSocket) -> None:
+        self.ws = ws
+        self.send_lock = asyncio.Lock()  # WS sends are not safe under concurrency
+        # turnId → asyncio.Task (running pipeline)
+        self.turns: dict[str, asyncio.Task] = {}
+        # session_id → turnId currently running for that session (if any)
+        self.session_turn: dict[str, str] = {}
+        # sliding window of message timestamps for rate-limiting
+        self.window: list[float] = []
 
-Here's what I found in the data you shared:
+    async def send(self, ev: dict) -> None:
+        async with self.send_lock:
+            await self.ws.send_text(json.dumps(ev))
 
-### Key Findings
+    def rate_check(self) -> bool:
+        now = time.time()
+        self.window[:] = [t for t in self.window if now - t < 60]
+        if len(self.window) >= RATE_LIMIT_PER_MIN:
+            return False
+        self.window.append(now)
+        return True
 
-1. **Memory leak** in the auth service — RSS growing ~50 MB / hour [1]
-2. **Slow queries** on the `user_sessions` table — P99 latency at 2.3 s [2]
-3. **Connection-pool exhaustion** — pool maxed out 47 times in the last 24 h [1]
-4. **Disk I/O spikes** on primary nodes during peak hours [3]
-
-### Recommended Actions
-
-```bash
-# Restart with a larger heap
-systemctl restart auth-service --env HEAP_SIZE=4096m
-```
-
-### Metrics Summary
-
-| Metric    | Current | Threshold | Status      |
-|-----------|---------|-----------|-------------|
-| CPU       | 78%     | 85%       | ⚠️ Warning  |
-| Memory    | 92%     | 90%       | 🔴 Critical |
-| Disk I/O  | 45%     | 70%       | ✅ OK       |
-
-> The memory issue is the most critical — fix it before the next deploy. [1][3]
-"""
-
-SOURCES = [
-    {
-        "id": "src-1",
-        "name": "system_logs_march_2024.pdf",
-        "url": "#",
-        "snippet": "Authentication service RSS memory growing at ~50MB/hour. Connection pool reaching maximum capacity of 100 connections repeatedly.",
-        "page": 12,
-    },
-    {
-        "id": "src-2",
-        "name": "performance_metrics_report.docx",
-        "url": "#",
-        "snippet": "P99 latency for user_sessions table queries measured at 2.3 seconds. Index scans fall back to sequential reads under high load.",
-        "page": 4,
-    },
-    {
-        "id": "src-3",
-        "name": "incident_2024_03_18.json",
-        "url": "#",
-        "snippet": "Disk I/O saturation observed on primary nodes between 09:00–11:00 and 18:00–20:00.",
-    },
-]
-CITATIONS = [
-    {"index": 1, "sourceId": "src-1", "text": "Memory leak detected in authentication service"},
-    {"index": 2, "sourceId": "src-2", "text": "Slow queries on user_sessions table"},
-    {"index": 3, "sourceId": "src-3", "text": "Disk I/O saturation on primary nodes"},
-]
+    async def cancel_turn(self, turn_id: str) -> None:
+        task = self.turns.pop(turn_id, None)
+        if task and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await task
 
 
-async def send(ws: WebSocket, ev: dict[str, Any]) -> None:
-    await ws.send_text(json.dumps(ev))
+async def _run_turn(conn: Connection, payload: ChatPayload) -> None:
+    """Run the pipeline for one turn and persist the resulting message.
 
+    Cancellation: if the task is cancelled mid-stream, the partial assistant
+    message is still saved with status='cancelled' so the user sees what was
+    produced before they hit Stop.
+    """
+    sid = payload.sessionId
+    turn_id = payload.turnId
 
-async def stream_event(ws: WebSocket, phase: str, label: str, lines: list[str], tool: Optional[str] = None, raw: Optional[dict] = None) -> None:
-    eid = str(uuid.uuid4())
-    started = time.time()
-    await send(ws, {"type": "phase_event", "phase": phase, "eventId": eid, "label": label, "toolName": tool})
-    for line in lines:
-        for ch in line:
-            await send(ws, {"type": "event_chunk", "phase": phase, "eventId": eid, "chunk": ch})
-            await asyncio.sleep(0.005)
-        await send(ws, {"type": "event_chunk", "phase": phase, "eventId": eid, "chunk": "\n"})
-        await asyncio.sleep(0.1)
-    await send(ws, {
-        "type": "event_done",
-        "phase": phase,
-        "eventId": eid,
-        "durationMs": int((time.time() - started) * 1000),
-        "rawOutput": json.dumps(raw, indent=2) if raw else None,
-    })
+    # 1) persist the user message (so reload shows it even if streaming dies)
+    user_msg = {
+        "id": str(uuid.uuid4()),
+        "role": "user",
+        "content": payload.content,
+        "timestamp": int(time.time() * 1000),
+        "status": "complete",
+        "attachments": [a.model_dump() for a in payload.attachments],
+        "pasteSnippets": [s.model_dump() for s in payload.snippets],
+    }
+    await storage.append_message(sid, user_msg)
 
+    # 2) Tell the client which turn is starting (so it can correlate cancels)
+    await conn.send({"type": "turn_start", "sessionId": sid, "turnId": turn_id,
+                     "userMessageId": user_msg["id"]})
 
-async def run_pipeline(ws: WebSocket, payload: ChatPayload) -> None:
-    # ROUTING
-    await send(ws, {"type": "phase_start", "phase": "routing", "label": "Routing", "description": "Classifying intent"})
-    await stream_event(ws, "routing", "Classifying intent", ["intent=incident.diagnose · confidence=0.94"])
-    await send(ws, {"type": "phase_done", "phase": "routing"})
+    assistant_id = str(uuid.uuid4())
+    assembled = ""
+    pipeline_trace: list[dict] = []
+    sources: list[dict] = []
+    citations: list[dict] = []
+    status = "complete"
 
-    # PLANNING
-    await send(ws, {"type": "phase_start", "phase": "planning", "label": "Planning", "description": "Building execution plan"})
-    await stream_event(ws, "planning", "Drafting tool plan", [
-        "1) splunk.search auth_service errors",
-        "2) vector.search uploaded docs",
-        "3) jira.query open incidents",
-    ])
-    await send(ws, {"type": "phase_done", "phase": "planning"})
+    try:
+        async for ev in pipeline.run(payload.content):
+            # Tag every event with sessionId+turnId so the client routes it
+            ev["sessionId"] = sid
+            ev["turnId"] = turn_id
+            await conn.send(ev)
 
-    # EXECUTING — multiple tools
-    await send(ws, {"type": "phase_start", "phase": "executing", "label": "Executing", "description": "Running tools"})
-    await stream_event(ws, "executing", "Querying Splunk", SPLUNK_REVEAL,
-                       tool="splunk.search",
-                       raw={"events_scanned": 14232, "oom_warnings": 47, "memory": {"avg_gb": 2.1, "peak_gb": 4.4}})
-    await stream_event(ws, "executing", "Searching uploaded documents", VECTOR_REVEAL,
-                       tool="vector.search",
-                       raw={"topk": 8, "total_chunks": 12448, "matches": ["system_logs_march_2024.pdf#p12", "performance_metrics_report.docx#p4"]})
-    await stream_event(ws, "executing", "Cross-referencing Jira", JIRA_REVEAL,
-                       tool="jira.query",
-                       raw={"issues": ["INC-1042", "INC-1057"]})
-    await send(ws, {"type": "phase_done", "phase": "executing"})
+            # Maintain a server-side trace so we can persist the final message
+            t = ev.get("type")
+            if t == "token":
+                assembled += ev.get("text", "")
+            elif t == "sources":
+                sources = ev.get("sources", [])
+                citations = ev.get("citations", [])
+            elif t in ("phase_start", "phase_event", "event_done", "phase_done"):
+                pipeline_trace.append({k: v for k, v in ev.items() if k not in ("sessionId", "turnId")})
+    except asyncio.CancelledError:
+        status = "cancelled"
+        await conn.send({"type": "cancelled", "sessionId": sid, "turnId": turn_id})
+        # don't re-raise — we still want to persist the partial message
 
-    # SYNTHESIZING
-    await send(ws, {"type": "phase_start", "phase": "synthesizing", "label": "Synthesizing", "description": "Composing response"})
-    await stream_event(ws, "synthesizing", "Composing answer", ["building markdown response with citations…"])
-    await send(ws, {"type": "phase_done", "phase": "synthesizing"})
+    # 3) Persist assistant message (always, even if cancelled / errored)
+    assistant_msg = {
+        "id": assistant_id,
+        "role": "assistant",
+        "content": assembled,
+        "timestamp": int(time.time() * 1000),
+        "status": status,
+        "sources": sources,
+        "citations": citations,
+        "pipeline": pipeline_trace,
+    }
+    await storage.append_message(sid, assistant_msg)
 
-    # TOKEN STREAM
-    buf = ""
-    for i, ch in enumerate(FINAL_RESPONSE):
-        buf += ch
-        if len(buf) >= 3 or i == len(FINAL_RESPONSE) - 1:
-            await send(ws, {"type": "token", "text": buf})
-            buf = ""
-            await asyncio.sleep(0.008)
-
-    await send(ws, {"type": "sources", "sources": SOURCES, "citations": CITATIONS})
-    await send(ws, {"type": "done"})
+    # 4) Cleanup turn bookkeeping
+    conn.turns.pop(turn_id, None)
+    if conn.session_turn.get(sid) == turn_id:
+        conn.session_turn.pop(sid, None)
 
 
 @app.websocket("/ws/chat")
 async def chat_ws(ws: WebSocket) -> None:
     await ws.accept()
-    msg_window: list[float] = []
+    conn = Connection(ws)
+    log.info("ws connected")
     try:
         while True:
             raw = await ws.receive_text()
 
-            # rate limit
-            now = time.time()
-            msg_window[:] = [t for t in msg_window if now - t < 60]
-            if len(msg_window) >= RATE_LIMIT_PER_MIN:
-                await send(ws, {"type": "error", "message": "rate limit exceeded"})
-                continue
-            msg_window.append(now)
-
-            # validate
+            # Validate envelope
             try:
                 data = json.loads(raw)
-                payload = ChatPayload(**data)
-            except (json.JSONDecodeError, ValidationError) as e:
-                await send(ws, {"type": "error", "message": f"invalid payload: {e}"})
+                if not isinstance(data, dict):
+                    raise ValueError("payload must be an object")
+            except (json.JSONDecodeError, ValueError) as e:
+                await conn.send({"type": "error", "message": f"invalid json: {e}"})
                 continue
 
-            await run_pipeline(ws, payload)
+            kind = data.get("type", "message")
+
+            # ---- CANCEL ----
+            if kind == "cancel":
+                try:
+                    cp = CancelPayload(**data)
+                except ValidationError as e:
+                    await conn.send({"type": "error", "message": f"invalid cancel: {e.errors()[0]['msg']}"})
+                    continue
+                await conn.cancel_turn(cp.turnId)
+                continue
+
+            # ---- MESSAGE ----
+            if not conn.rate_check():
+                await conn.send({"type": "error", "message": "rate limit exceeded"})
+                continue
+            try:
+                payload = ChatPayload(**data)
+            except ValidationError as e:
+                await conn.send({"type": "error", "message": f"invalid payload: {e.errors()[0]['msg']}"})
+                continue
+
+            # If the same session already has a running turn → cancel it.
+            # Different sessions run in parallel — that's the whole point.
+            prev_turn = conn.session_turn.get(payload.sessionId)
+            if prev_turn and prev_turn != payload.turnId:
+                await conn.cancel_turn(prev_turn)
+
+            task = asyncio.create_task(_run_turn(conn, payload))
+            conn.turns[payload.turnId] = task
+            conn.session_turn[payload.sessionId] = payload.turnId
+
     except WebSocketDisconnect:
-        return
+        log.info("ws disconnected")
     except Exception as e:  # last-resort guard
-        try:
-            await send(ws, {"type": "error", "message": f"server error: {e}"})
-        except Exception:
-            pass
+        log.exception("ws error")
+        with suppress(Exception):
+            await conn.send({"type": "error", "message": f"server error: {e}"})
+    finally:
+        # Cancel any in-flight turns belonging to this connection
+        for tid in list(conn.turns.keys()):
+            await conn.cancel_turn(tid)
