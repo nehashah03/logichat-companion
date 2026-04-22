@@ -1033,10 +1033,55 @@ const MessageBubble: React.FC<Props> = ({ message, onRetry, searchQuery }) => {
                     );
                   },
 
+                  // Interactive table: sortable columns + per-column filter.
+                  table({ children }) {
+                    return <InteractiveTable>{children}</InteractiveTable>;
+                  },
+
+                  // Clickable image preview.
+                  img({ src, alt }) {
+                    if (!src) return null;
+                    return (
+                      <Box
+                        component="img"
+                        src={src}
+                        alt={alt || ""}
+                        onClick={() =>
+                          setFilePreview({
+                            url: src,
+                            type: "image/*",
+                            name: alt || "image",
+                          })
+                        }
+                        sx={{
+                          maxWidth: "100%",
+                          maxHeight: 320,
+                          borderRadius: "10px",
+                          border: "1px solid",
+                          borderColor: palette.border,
+                          my: 1,
+                          cursor: "zoom-in",
+                          display: "block",
+                          transition: "transform .15s ease, box-shadow .15s ease",
+                          "&:hover": {
+                            transform: "translateY(-1px)",
+                            boxShadow: `0 6px 18px ${palette.bgCode || "rgba(0,0,0,0.2)"}`,
+                          },
+                        }}
+                      />
+                    );
+                  },
+
                   p({ children }) {
                     const transformed = React.Children.map(children, (child) => {
                       if (typeof child === "string") {
-                        return renderWithCitations(child, sourceById, citations);
+                        return renderWithCitations(
+                          child,
+                          sourceById,
+                          citations,
+                          searchQuery,
+                          palette,
+                        );
                       }
                       return child;
                     });
@@ -1046,7 +1091,13 @@ const MessageBubble: React.FC<Props> = ({ message, onRetry, searchQuery }) => {
                   li({ children }) {
                     const transformed = React.Children.map(children, (child) => {
                       if (typeof child === "string") {
-                        return renderWithCitations(child, sourceById, citations);
+                        return renderWithCitations(
+                          child,
+                          sourceById,
+                          citations,
+                          searchQuery,
+                          palette,
+                        );
                       }
                       return child;
                     });
