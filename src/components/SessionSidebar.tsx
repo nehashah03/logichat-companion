@@ -1496,10 +1496,41 @@ const SessionSidebar: React.FC = () => {
     [filtered],
   );
 
-  // Non-favorite recent chats
-  const recents = useMemo(
-    () => filtered.filter((s) => !s.favorite),
-    [filtered],
+  // Non-favorite chats grouped into ChatGPT-style time buckets
+  // (Today / Yesterday / Previous 7 days / Previous 30 days / Older).
+  // `Session.updatedAt` is in milliseconds but `groupForTimestamp` expects
+  // seconds, so divide by 1000 before bucketing.
+  const GROUP_ORDER: GroupKey[] = [
+    "today",
+    "yesterday",
+    "last7",
+    "last30",
+    "older",
+  ];
+
+  const recentGroups = useMemo(() => {
+    const nonFav = filtered.filter((s) => !s.favorite);
+    const buckets = new Map<GroupKey, Session[]>();
+    for (const s of nonFav) {
+      const k = groupForTimestamp(s.updatedAt / 1000);
+      if (!buckets.has(k)) buckets.set(k, []);
+      buckets.get(k)!.push(s);
+    }
+    // Sort each bucket by most recently updated first.
+    for (const list of buckets.values()) {
+      list.sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+    return GROUP_ORDER.filter((k) => buckets.has(k)).map((k) => ({
+      key: k,
+      label: GROUP_LABELS[k],
+      sessions: buckets.get(k)!,
+    }));
+  }, [filtered]);
+
+  // Total non-favorite results (used for empty-state messages)
+  const recentsTotal = useMemo(
+    () => recentGroups.reduce((sum, g) => sum + g.sessions.length, 0),
+    [recentGroups],
   );
 
   /* ------------------------------ */
