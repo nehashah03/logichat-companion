@@ -2101,58 +2101,69 @@ const SessionSidebar: React.FC = () => {
               </List>
             </Collapse>
 
-            {/* Recent chats */}
+            {/* Recent chats — ChatGPT-style time groups:
+                Today / Yesterday / Previous 7 days / Previous 30 days / Older.
+                The outer "Chats" header toggles ALL groups collectively. */}
             <SectionHeader
-              title="Recent chats"
+              title="Chats"
               open={recentOpen}
               onToggle={() => setRecentOpen((prev) => !prev)}
               palette={palette}
             />
 
             <Collapse in={recentOpen}>
-              <List dense disablePadding sx={{ px: 0.5, pb: 1 }}>
-                {recents.length === 0 && filtered.length === 0 ? (
-                  <Typography
-                    sx={{
-                      fontSize: 11.5,
-                      px: 1,
-                      py: 0.75,
-                      color: palette.textSecondary,
-                    }}
-                  >
-                    {search.trim()
+              {recentsTotal === 0 ? (
+                <Typography
+                  sx={{
+                    fontSize: 11.5,
+                    px: 1.5,
+                    py: 0.75,
+                    color: palette.textSecondary,
+                  }}
+                >
+                  {search.trim()
+                    ? filtered.length === 0
                       ? "No matches found."
+                      : "No matches in chats."
+                    : favorites.length > 0
+                      ? "All chats are in Favorites."
                       : "No chats yet — start with New chat."}
-                  </Typography>
-                ) : recents.length === 0 ? (
-                  <Typography
-                    sx={{
-                      fontSize: 11.5,
-                      px: 1,
-                      py: 0.75,
-                      color: palette.textSecondary,
-                    }}
-                  >
-                    {search.trim()
-                      ? "No matches in recent chats."
-                      : "All chats are in Favorites."}
-                  </Typography>
-                ) : (
-                  recents.map((session) => (
-                    <ChatRow
-                      key={session.id}
-                      session={session}
-                      activeSessionId={activeSessionId}
-                      search={search}
-                      expanded
-                      onSelect={handleSelectSession}
-                      onMenu={openMenu}
-                      palette={palette}
-                      mode={mode}
-                    />
-                  ))
-                )}
-              </List>
+                </Typography>
+              ) : (
+                recentGroups.map((group) => (
+                  <Box key={group.key} sx={{ mb: 0.5 }}>
+                    <Typography
+                      sx={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        letterSpacing: 0.5,
+                        textTransform: "uppercase",
+                        color: palette.textMuted,
+                        px: 1.5,
+                        pt: 0.75,
+                        pb: 0.25,
+                      }}
+                    >
+                      {group.label}
+                    </Typography>
+                    <List dense disablePadding sx={{ px: 0.5, pb: 0.5 }}>
+                      {group.sessions.map((session) => (
+                        <ChatRow
+                          key={session.id}
+                          session={session}
+                          activeSessionId={activeSessionId}
+                          search={search}
+                          expanded
+                          onSelect={handleSelectSession}
+                          onMenu={openMenu}
+                          palette={palette}
+                          mode={mode}
+                        />
+                      ))}
+                    </List>
+                  </Box>
+                ))
+              )}
             </Collapse>
           </>
         ) : (
