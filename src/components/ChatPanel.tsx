@@ -3607,6 +3607,7 @@ const ChatPanel: React.FC = () => {
               <MessageBubble
                 key={msg.id}
                 message={msg}
+                searchQuery={chatSearch}
                 onRetry={
                   msg.status === "error"
                     ? () =>
