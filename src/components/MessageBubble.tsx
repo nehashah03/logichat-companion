@@ -331,6 +331,7 @@ import type { ChatMessage, FileAttachment } from "../features/chat/chatSlice";
 import PipelinePanel from "./PipelinePanel";
 import SourcesPanel from "./SourcesPanel";
 import CitationChip from "./CitationChip";
+import InteractiveTable from "./InteractiveTable";
 import { useThemeMode } from "../contexts/ThemeModeContext";
 
 /* ============================================================
@@ -339,6 +340,8 @@ import { useThemeMode } from "../contexts/ThemeModeContext";
 interface Props {
   message: ChatMessage;
   onRetry?: () => void;
+  /** Optional query to highlight inside message text. */
+  searchQuery?: string;
 }
 
 /* ============================================================
