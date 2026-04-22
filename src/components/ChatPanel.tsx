@@ -3327,6 +3327,67 @@ const ChatPanel: React.FC = () => {
             </IconButton>
           </Tooltip>
 
+          {/* In-chat search */}
+          {messages.length > 0 && (
+            <>
+              {searchOpen ? (
+                <TextField
+                  size="small"
+                  autoFocus
+                  placeholder="Search this chat…"
+                  value={chatSearch}
+                  onChange={(e) => setChatSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setChatSearch("");
+                      setSearchOpen(false);
+                    }
+                  }}
+                  sx={{
+                    width: 240,
+                    "& .MuiInputBase-root": {
+                      fontSize: 13,
+                      bgcolor: palette.bgInput,
+                      color: palette.textPrimary,
+                    },
+                    "& fieldset": { borderColor: palette.border },
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ fontSize: 16, color: palette.textMuted }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setChatSearch("");
+                            setSearchOpen(false);
+                          }}
+                          sx={{ color: palette.textMuted }}
+                        >
+                          <CloseIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              ) : (
+                <Tooltip title="Search in this chat">
+                  <IconButton
+                    size="small"
+                    onClick={() => setSearchOpen(true)}
+                    sx={{ color: palette.textSecondary }}
+                  >
+                    <SearchIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </>
+          )}
+
           {/* Settings drawer button */}
           <Tooltip title="Settings">
             <IconButton
