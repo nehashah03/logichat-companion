@@ -1135,6 +1135,12 @@ import { useSettingsUi } from "../contexts/SettingsUiContext";
 
 import type { Session } from "../features/session/sessionSlice";
 
+import {
+  GROUP_LABELS,
+  groupForTimestamp,
+  type GroupKey,
+} from "../utils/grouping";
+
 /* ---------------------------------- */
 /* Sidebar widths                      */
 /* ---------------------------------- */
@@ -1490,10 +1496,41 @@ const SessionSidebar: React.FC = () => {
     [filtered],
   );
 
-  // Non-favorite recent chats
-  const recents = useMemo(
-    () => filtered.filter((s) => !s.favorite),
-    [filtered],
+  // Non-favorite chats grouped into ChatGPT-style time buckets
+  // (Today / Yesterday / Previous 7 days / Previous 30 days / Older).
+  // `Session.updatedAt` is in milliseconds but `groupForTimestamp` expects
+  // seconds, so divide by 1000 before bucketing.
+  const GROUP_ORDER: GroupKey[] = [
+    "today",
+    "yesterday",
+    "last7",
+    "last30",
+    "older",
+  ];
+
+  const recentGroups = useMemo(() => {
+    const nonFav = filtered.filter((s) => !s.favorite);
+    const buckets = new Map<GroupKey, Session[]>();
+    for (const s of nonFav) {
+      const k = groupForTimestamp(s.updatedAt / 1000);
+      if (!buckets.has(k)) buckets.set(k, []);
+      buckets.get(k)!.push(s);
+    }
+    // Sort each bucket by most recently updated first.
+    for (const list of buckets.values()) {
+      list.sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+    return GROUP_ORDER.filter((k) => buckets.has(k)).map((k) => ({
+      key: k,
+      label: GROUP_LABELS[k],
+      sessions: buckets.get(k)!,
+    }));
+  }, [filtered]);
+
+  // Total non-favorite results (used for empty-state messages)
+  const recentsTotal = useMemo(
+    () => recentGroups.reduce((sum, g) => sum + g.sessions.length, 0),
+    [recentGroups],
   );
 
   /* ------------------------------ */
@@ -2064,58 +2101,69 @@ const SessionSidebar: React.FC = () => {
               </List>
             </Collapse>
 
-            {/* Recent chats */}
+            {/* Recent chats — ChatGPT-style time groups:
+                Today / Yesterday / Previous 7 days / Previous 30 days / Older.
+                The outer "Chats" header toggles ALL groups collectively. */}
             <SectionHeader
-              title="Recent chats"
+              title="Chats"
               open={recentOpen}
               onToggle={() => setRecentOpen((prev) => !prev)}
               palette={palette}
             />
 
             <Collapse in={recentOpen}>
-              <List dense disablePadding sx={{ px: 0.5, pb: 1 }}>
-                {recents.length === 0 && filtered.length === 0 ? (
-                  <Typography
-                    sx={{
-                      fontSize: 11.5,
-                      px: 1,
-                      py: 0.75,
-                      color: palette.textSecondary,
-                    }}
-                  >
-                    {search.trim()
+              {recentsTotal === 0 ? (
+                <Typography
+                  sx={{
+                    fontSize: 11.5,
+                    px: 1.5,
+                    py: 0.75,
+                    color: palette.textSecondary,
+                  }}
+                >
+                  {search.trim()
+                    ? filtered.length === 0
                       ? "No matches found."
+                      : "No matches in chats."
+                    : favorites.length > 0
+                      ? "All chats are in Favorites."
                       : "No chats yet — start with New chat."}
-                  </Typography>
-                ) : recents.length === 0 ? (
-                  <Typography
-                    sx={{
-                      fontSize: 11.5,
-                      px: 1,
-                      py: 0.75,
-                      color: palette.textSecondary,
-                    }}
-                  >
-                    {search.trim()
-                      ? "No matches in recent chats."
-                      : "All chats are in Favorites."}
-                  </Typography>
-                ) : (
-                  recents.map((session) => (
-                    <ChatRow
-                      key={session.id}
-                      session={session}
-                      activeSessionId={activeSessionId}
-                      search={search}
-                      expanded
-                      onSelect={handleSelectSession}
-                      onMenu={openMenu}
-                      palette={palette}
-                      mode={mode}
-                    />
-                  ))
-                )}
-              </List>
+                </Typography>
+              ) : (
+                recentGroups.map((group) => (
+                  <Box key={group.key} sx={{ mb: 0.5 }}>
+                    <Typography
+                      sx={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        letterSpacing: 0.5,
+                        textTransform: "uppercase",
+                        color: palette.textMuted,
+                        px: 1.5,
+                        pt: 0.75,
+                        pb: 0.25,
+                      }}
+                    >
+                      {group.label}
+                    </Typography>
+                    <List dense disablePadding sx={{ px: 0.5, pb: 0.5 }}>
+                      {group.sessions.map((session) => (
+                        <ChatRow
+                          key={session.id}
+                          session={session}
+                          activeSessionId={activeSessionId}
+                          search={search}
+                          expanded
+                          onSelect={handleSelectSession}
+                          onMenu={openMenu}
+                          palette={palette}
+                          mode={mode}
+                        />
+                      ))}
+                    </List>
+                  </Box>
+                ))
+              )}
             </Collapse>
           </>
         ) : (

@@ -49,6 +49,12 @@ const MOCK_RESPONSE = `## Analysis Complete
 
 Here's what I found in the data you shared:
 
+### Incident Dashboard
+
+![CPU and Memory usage over 24h](https://picsum.photos/seed/logic-cpu/640/260)
+
+![Error rate heatmap by service](https://picsum.photos/seed/logic-heatmap/640/260)
+
 ### Key Findings
 
 1. **Memory leak** in the auth service — RSS growing ~50 MB / hour [1]

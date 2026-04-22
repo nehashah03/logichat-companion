@@ -2727,6 +2727,7 @@ import {
   Tooltip,
   Divider,
   TextField,
+  InputAdornment,
 } from "@mui/material";
 
 // Theme toggle icons
@@ -2736,6 +2737,8 @@ import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 // Settings + rename icons
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import SearchIcon from "@mui/icons-material/Search";
+import CloseIcon from "@mui/icons-material/Close";
 
 // Redux hooks
 import { useAppDispatch, useAppSelector } from "../store/hooks";
@@ -2876,6 +2879,12 @@ const ChatPanel: React.FC = () => {
 
   // Temporary title text while editing
   const [titleDraft, setTitleDraft] = useState("");
+
+  // In-chat search query (used to highlight matches in message bubbles)
+  const [chatSearch, setChatSearch] = useState("");
+
+  // Whether the search input is visible in the header
+  const [searchOpen, setSearchOpen] = useState(false);
 
   /* ------------------------------------------------------------
      DERIVED VALUES
@@ -3318,6 +3327,67 @@ const ChatPanel: React.FC = () => {
             </IconButton>
           </Tooltip>
 
+          {/* In-chat search */}
+          {messages.length > 0 && (
+            <>
+              {searchOpen ? (
+                <TextField
+                  size="small"
+                  autoFocus
+                  placeholder="Search this chat…"
+                  value={chatSearch}
+                  onChange={(e) => setChatSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setChatSearch("");
+                      setSearchOpen(false);
+                    }
+                  }}
+                  sx={{
+                    width: 240,
+                    "& .MuiInputBase-root": {
+                      fontSize: 13,
+                      bgcolor: palette.bgInput,
+                      color: palette.textPrimary,
+                    },
+                    "& fieldset": { borderColor: palette.border },
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ fontSize: 16, color: palette.textMuted }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setChatSearch("");
+                            setSearchOpen(false);
+                          }}
+                          sx={{ color: palette.textMuted }}
+                        >
+                          <CloseIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              ) : (
+                <Tooltip title="Search in this chat">
+                  <IconButton
+                    size="small"
+                    onClick={() => setSearchOpen(true)}
+                    sx={{ color: palette.textSecondary }}
+                  >
+                    <SearchIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </>
+          )}
+
           {/* Settings drawer button */}
           <Tooltip title="Settings">
             <IconButton
@@ -3537,6 +3607,7 @@ const ChatPanel: React.FC = () => {
               <MessageBubble
                 key={msg.id}
                 message={msg}
+                searchQuery={chatSearch}
                 onRetry={
                   msg.status === "error"
                     ? () =>
