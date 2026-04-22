@@ -1,35 +1,488 @@
-/**
- * Chat slice.
- *
- * **Per-session state.** Every key is a `Record<sessionId, T>` so multiple
- * chats can stream concurrently without interfering with each other.
- * Selectors take a `sessionId` to read the right slice.
- *
- * No content is read from `localStorage` — Redux is the only client-side
- * source of truth. The server (`backend/storage.py`) is the durable source.
- */
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+// import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-// ---- Domain types ---------------------------------------------------------
+// export interface ChatMessage {
+//   id: string;
+//   role: 'user' | 'assistant';
+//   content: string;
+//   timestamp: number;
+//   status: 'sending' | 'streaming' | 'complete' | 'error';
+//   toolOutputs?: ToolOutput[];
+//   attachments?: FileAttachment[];
+//   sources?: SourceDoc[];
+//   citations?: Citation[];
+//   pipeline?: PipelinePhase[]; // persisted full pipeline trace
+//   pasteSnippets?: PasteSnippet[];
+// }
+
+// export interface ToolOutput {
+//   id: string;
+//   name: string;       // e.g. "splunk.search", "jira.query"
+//   content: string;
+//   type: 'text' | 'table' | 'code';
+//   status?: 'running' | 'done' | 'error';
+//   startedAt?: number;
+//   durationMs?: number;
+// }
+
+// export interface FileAttachment {
+//   name: string;
+//   size: number;
+//   type: string;
+//   preview?: string;       // image dataURL/objectURL
+//   textPreview?: string;   // first lines of text-based file
+// }
+
+// export interface PasteSnippet {
+//   id: string;
+//   language: string;
+//   content: string;
+//   lines: number;
+// }
+
+// export interface SourceDoc {
+//   id: string;
+//   name: string;
+//   url?: string;
+//   snippet: string;
+//   page?: number;
+// }
+
+// export interface Citation {
+//   index: number;          // [1], [2]…
+//   sourceId: string;
+//   text: string;
+// }
+
+// // ---- Pipeline (Routing → Planning → Executing → Synthesizing) ----
+// export type PhaseKey = 'routing' | 'planning' | 'executing' | 'synthesizing';
+// export type PhaseStatus = 'pending' | 'active' | 'complete';
+
+// export interface PhaseEvent {
+//   id: string;
+//   label: string;          // human readable line, e.g. "Routing query to Splunk tool"
+//   detail?: string;        // streaming detail text
+//   toolName?: string;      // e.g. "splunk.search"
+//   status: 'running' | 'done' | 'error';
+//   startedAt: number;
+//   endedAt?: number;
+//   rawOutput?: string;     // raw tool output for power-user expansion
+//   durationMs?: number;
+// }
+
+// export interface PipelinePhase {
+//   key: PhaseKey;
+//   label: string;
+//   description: string;
+//   status: PhaseStatus;
+//   startedAt?: number;
+//   endedAt?: number;
+//   events: PhaseEvent[];
+// }
+
+// export type PipelineStage = 'idle' | PhaseKey | 'streaming' | 'complete';
+
+// interface ChatState {
+//   messages: ChatMessage[];
+//   isStreaming: boolean;
+//   pipelineStage: PipelineStage;
+//   livePipeline: PipelinePhase[];      // current in-flight phases for active assistant msg
+//   liveAssistantId: string | null;
+//   elapsedTime: number;
+//   error: string | null;
+// }
+
+// const initialState: ChatState = {
+//   messages: [],
+//   isStreaming: false,
+//   pipelineStage: 'idle',
+//   livePipeline: [],
+//   liveAssistantId: null,
+//   elapsedTime: 0,
+//   error: null,
+// };
+
+// const chatSlice = createSlice({
+//   name: 'chat',
+//   initialState,
+//   reducers: {
+//     addMessage(state, action: PayloadAction<ChatMessage>) {
+//       state.messages.push(action.payload);
+//     },
+//     appendToMessage(state, action: PayloadAction<{ id: string; token: string }>) {
+//       const msg = state.messages.find(m => m.id === action.payload.id);
+//       if (msg) msg.content += action.payload.token;
+//     },
+//     setMessageStatus(state, action: PayloadAction<{ id: string; status: ChatMessage['status'] }>) {
+//       const msg = state.messages.find(m => m.id === action.payload.id);
+//       if (msg) msg.status = action.payload.status;
+//     },
+//     setMessageSources(state, action: PayloadAction<{ messageId: string; sources: SourceDoc[]; citations: Citation[] }>) {
+//       const msg = state.messages.find(m => m.id === action.payload.messageId);
+//       if (msg) {
+//         msg.sources = action.payload.sources;
+//         msg.citations = action.payload.citations;
+//       }
+//     },
+//     setMessagePipeline(state, action: PayloadAction<{ messageId: string; pipeline: PipelinePhase[] }>) {
+//       const msg = state.messages.find(m => m.id === action.payload.messageId);
+//       if (msg) msg.pipeline = action.payload.pipeline;
+//     },
+//     // ---- Live pipeline mutations (during streaming) ----
+//     initLivePipeline(state, action: PayloadAction<{ assistantId: string; phases: PipelinePhase[] }>) {
+//       state.liveAssistantId = action.payload.assistantId;
+//       state.livePipeline = action.payload.phases;
+//     },
+//     setPhaseStatus(state, action: PayloadAction<{ phaseKey: PhaseKey; status: PhaseStatus }>) {
+//       const ph = state.livePipeline.find(p => p.key === action.payload.phaseKey);
+//       if (ph) {
+//         ph.status = action.payload.status;
+//         if (action.payload.status === 'active' && !ph.startedAt) ph.startedAt = Date.now();
+//         if (action.payload.status === 'complete') ph.endedAt = Date.now();
+//       }
+//     },
+//     addPhaseEvent(state, action: PayloadAction<{ phaseKey: PhaseKey; event: PhaseEvent }>) {
+//       const ph = state.livePipeline.find(p => p.key === action.payload.phaseKey);
+//       if (ph) ph.events.push(action.payload.event);
+//     },
+//     updatePhaseEvent(state, action: PayloadAction<{ phaseKey: PhaseKey; eventId: string; patch: Partial<PhaseEvent> }>) {
+//       const ph = state.livePipeline.find(p => p.key === action.payload.phaseKey);
+//       if (!ph) return;
+//       const ev = ph.events.find(e => e.id === action.payload.eventId);
+//       if (ev) Object.assign(ev, action.payload.patch);
+//     },
+//     appendPhaseEventDetail(state, action: PayloadAction<{ phaseKey: PhaseKey; eventId: string; chunk: string }>) {
+//       const ph = state.livePipeline.find(p => p.key === action.payload.phaseKey);
+//       if (!ph) return;
+//       const ev = ph.events.find(e => e.id === action.payload.eventId);
+//       if (ev) ev.detail = (ev.detail || '') + action.payload.chunk;
+//     },
+//     clearLivePipeline(state) {
+//       state.livePipeline = [];
+//       state.liveAssistantId = null;
+//     },
+//     setStreaming(state, action: PayloadAction<boolean>) {
+//       state.isStreaming = action.payload;
+//     },
+//     setPipelineStage(state, action: PayloadAction<PipelineStage>) {
+//       state.pipelineStage = action.payload;
+//     },
+//     setElapsedTime(state, action: PayloadAction<number>) {
+//       state.elapsedTime = action.payload;
+//     },
+//     setError(state, action: PayloadAction<string | null>) {
+//       state.error = action.payload;
+//     },
+//     loadMessages(state, action: PayloadAction<ChatMessage[]>) {
+//       state.messages = action.payload;
+//     },
+//     clearMessages(state) {
+//       state.messages = [];
+//       state.isStreaming = false;
+//       state.pipelineStage = 'idle';
+//       state.livePipeline = [];
+//       state.liveAssistantId = null;
+//       state.error = null;
+//     },
+//   },
+// });
+
+// export const {
+//   addMessage, appendToMessage, setMessageStatus,
+//   setMessageSources, setMessagePipeline,
+//   initLivePipeline, setPhaseStatus, addPhaseEvent, updatePhaseEvent,
+//   appendPhaseEventDetail, clearLivePipeline,
+//   setStreaming, setPipelineStage, setElapsedTime, setError,
+//   loadMessages, clearMessages,
+// } = chatSlice.actions;
+// export default chatSlice.reducer;
+
+// import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+
+// export interface ChatMessage {
+//   id: string;
+//   role: 'user' | 'assistant';
+//   content: string;
+//   timestamp: number;
+//   status: 'sending' | 'streaming' | 'complete' | 'error';
+//   toolOutputs?: ToolOutput[];
+//   attachments?: FileAttachment[];
+//   sources?: SourceDoc[];
+//   citations?: Citation[];
+//   pipeline?: PipelinePhase[]; // persisted full pipeline trace
+//   pasteSnippets?: PasteSnippet[];
+// }
+
+// export interface ToolOutput {
+//   id: string;
+//   name: string;       // e.g. "splunk.search", "jira.query"
+//   content: string;
+//   type: 'text' | 'table' | 'code';
+//   status?: 'running' | 'done' | 'error';
+//   startedAt?: number;
+//   durationMs?: number;
+// }
+
+// export interface FileAttachment {
+//   name: string;
+//   size: number;
+//   type: string;
+//   preview?: string;       // image dataURL/objectURL
+//   textPreview?: string;   // first lines of text-based file
+// }
+
+// export interface PasteSnippet {
+//   id: string;
+//   language: string;
+//   content: string;
+//   lines: number;
+// }
+
+// export interface SourceDoc {
+//   id: string;
+//   name: string;
+//   url?: string;
+//   snippet: string;
+//   page?: number;
+// }
+
+// export interface Citation {
+//   index: number;          // [1], [2]…
+//   sourceId: string;
+//   text: string;
+// }
+
+// // ---- Pipeline (Routing → Planning → Executing → Synthesizing) ----
+// export type PhaseKey = 'routing' | 'planning' | 'executing' | 'synthesizing';
+// export type PhaseStatus = 'pending' | 'active' | 'complete';
+
+// export interface PhaseEvent {
+//   id: string;
+//   label: string;          // human readable line, e.g. "Routing query to Splunk tool"
+//   detail?: string;        // streaming detail text
+//   toolName?: string;      // e.g. "splunk.search"
+//   status: 'running' | 'done' | 'error';
+//   startedAt: number;
+//   endedAt?: number;
+//   rawOutput?: string;     // raw tool output for power-user expansion
+//   durationMs?: number;
+// }
+
+// export interface PipelinePhase {
+//   key: PhaseKey;
+//   label: string;
+//   description: string;
+//   status: PhaseStatus;
+//   startedAt?: number;
+//   endedAt?: number;
+//   events: PhaseEvent[];
+// }
+
+// export type PipelineStage = 'idle' | PhaseKey | 'streaming' | 'complete';
+
+// interface ChatState {
+//   messages: ChatMessage[];
+//   isStreaming: boolean;
+//   pipelineStage: PipelineStage;
+//   livePipeline: PipelinePhase[];      // current in-flight phases for active assistant msg
+//   liveAssistantId: string | null;
+//   elapsedTime: number;
+//   error: string | null;
+// }
+
+// const initialState: ChatState = {
+//   messages: [],
+//   isStreaming: false,
+//   pipelineStage: 'idle',
+//   livePipeline: [],
+//   liveAssistantId: null,
+//   elapsedTime: 0,
+//   error: null,
+// };
+
+// const chatSlice = createSlice({
+//   name: 'chat',
+//   initialState,
+//   reducers: {
+//     addMessage(state, action: PayloadAction<ChatMessage>) {
+//       state.messages.push(action.payload);
+//     },
+//     appendToMessage(state, action: PayloadAction<{ id: string; token: string }>) {
+//       const msg = state.messages.find(m => m.id === action.payload.id);
+//       if (msg) msg.content += action.payload.token;
+//     },
+//     setMessageStatus(state, action: PayloadAction<{ id: string; status: ChatMessage['status'] }>) {
+//       const msg = state.messages.find(m => m.id === action.payload.id);
+//       if (msg) msg.status = action.payload.status;
+//     },
+//     setMessageSources(state, action: PayloadAction<{ messageId: string; sources: SourceDoc[]; citations: Citation[] }>) {
+//       const msg = state.messages.find(m => m.id === action.payload.messageId);
+//       if (msg) {
+//         msg.sources = action.payload.sources;
+//         msg.citations = action.payload.citations;
+//       }
+//     },
+//     setMessagePipeline(state, action: PayloadAction<{ messageId: string; pipeline: PipelinePhase[] }>) {
+//       const msg = state.messages.find(m => m.id === action.payload.messageId);
+//       if (msg) msg.pipeline = action.payload.pipeline;
+//     },
+//     // ---- Live pipeline mutations (during streaming) ----
+//     initLivePipeline(state, action: PayloadAction<{ assistantId: string; phases: PipelinePhase[] }>) {
+//       state.liveAssistantId = action.payload.assistantId;
+//       state.livePipeline = action.payload.phases;
+//     },
+//     setPhaseStatus(state, action: PayloadAction<{ phaseKey: PhaseKey; status: PhaseStatus }>) {
+//       const ph = state.livePipeline.find(p => p.key === action.payload.phaseKey);
+//       if (ph) {
+//         ph.status = action.payload.status;
+//         if (action.payload.status === 'active' && !ph.startedAt) ph.startedAt = Date.now();
+//         if (action.payload.status === 'complete') ph.endedAt = Date.now();
+//       }
+//     },
+//     addPhaseEvent(state, action: PayloadAction<{ phaseKey: PhaseKey; event: PhaseEvent }>) {
+//       const ph = state.livePipeline.find(p => p.key === action.payload.phaseKey);
+//       if (ph) ph.events.push(action.payload.event);
+//     },
+//     updatePhaseEvent(state, action: PayloadAction<{ phaseKey: PhaseKey; eventId: string; patch: Partial<PhaseEvent> }>) {
+//       const ph = state.livePipeline.find(p => p.key === action.payload.phaseKey);
+//       if (!ph) return;
+//       const ev = ph.events.find(e => e.id === action.payload.eventId);
+//       if (ev) Object.assign(ev, action.payload.patch);
+//     },
+//     appendPhaseEventDetail(state, action: PayloadAction<{ phaseKey: PhaseKey; eventId: string; chunk: string }>) {
+//       const ph = state.livePipeline.find(p => p.key === action.payload.phaseKey);
+//       if (!ph) return;
+//       const ev = ph.events.find(e => e.id === action.payload.eventId);
+//       if (ev) ev.detail = (ev.detail || '') + action.payload.chunk;
+//     },
+//     clearLivePipeline(state) {
+//       state.livePipeline = [];
+//       state.liveAssistantId = null;
+//     },
+//     setStreaming(state, action: PayloadAction<boolean>) {
+//       state.isStreaming = action.payload;
+//     },
+//     setPipelineStage(state, action: PayloadAction<PipelineStage>) {
+//       state.pipelineStage = action.payload;
+//     },
+//     setElapsedTime(state, action: PayloadAction<number>) {
+//       state.elapsedTime = action.payload;
+//     },
+//     setError(state, action: PayloadAction<string | null>) {
+//       state.error = action.payload;
+//     },
+//     loadMessages(state, action: PayloadAction<ChatMessage[]>) {
+//       state.messages = action.payload;
+//     },
+//     clearMessages(state) {
+//       state.messages = [];
+//       state.isStreaming = false;
+//       state.pipelineStage = 'idle';
+//       state.livePipeline = [];
+//       state.liveAssistantId = null;
+//       state.error = null;
+//     },
+//   },
+// });
+
+// export const {
+//   addMessage, appendToMessage, setMessageStatus,
+//   setMessageSources, setMessagePipeline,
+//   initLivePipeline, setPhaseStatus, addPhaseEvent, updatePhaseEvent,
+//   appendPhaseEventDetail, clearLivePipeline,
+//   setStreaming, setPipelineStage, setElapsedTime, setError,
+//   loadMessages, clearMessages,
+// } = chatSlice.actions;
+// export default chatSlice.reducer;
+
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+
+/* ============================================================
+   MESSAGE TYPES
+   ============================================================ */
+
+/**
+ * Each chat message (user or assistant)
+ */
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+
+  // Who sent the message
+  role: "user" | "assistant";
+
+  // Main text content (markdown supported)
   content: string;
+
+  // Timestamp (used for UI display)
   timestamp: number;
-  status: 'sending' | 'streaming' | 'complete' | 'error' | 'cancelled';
+
+  // Message lifecycle state
+  status: "sending" | "streaming" | "complete" | "error";
+
+  // Tool outputs (future / optional)
+  toolOutputs?: ToolOutput[];
+
+  // ✅ Attachments (ENHANCED - backward compatible)
   attachments?: FileAttachment[];
+
+  // Sources & citations (assistant only)
   sources?: SourceDoc[];
   citations?: Citation[];
-  pipeline?: PipelinePhase[];   // persisted full pipeline trace
+
+  // Persisted pipeline (assistant only)
+  pipeline?: PipelinePhase[];
+
+  // Legacy paste snippets (keep for compatibility)
   pasteSnippets?: PasteSnippet[];
 }
 
+/* ============================================================
+   ATTACHMENT TYPE (ENHANCED)
+   ============================================================ */
+
+/**
+ * File attachment used across:
+ * - ChatInput (before send)
+ * - MessageBubble (after send)
+ *
+ * ⚠️ This is backward compatible
+ */
 export interface FileAttachment {
+  id?: string;              // optional unique id for UI lists
+
   name: string;
   size: number;
   type: string;
+
+  // Image preview (base64 or objectURL)
   preview?: string;
+
+  // Small preview (optional)
+  textPreview?: string;
+
+  // ✅ NEW: keep object URL for preview after send
+  objectUrl?: string;
+
+  // ✅ NEW: full raw text for preview dialog
+  rawText?: string;
 }
+
+/* ============================================================
+   TOOL OUTPUT
+   ============================================================ */
+
+export interface ToolOutput {
+  id: string;
+  name: string;
+  content: string;
+  type: "text" | "table" | "code";
+  status?: "running" | "done" | "error";
+  startedAt?: number;
+  durationMs?: number;
+}
+
+/* ============================================================
+   PASTE SNIPPETS (LEGACY)
+   ============================================================ */
 
 export interface PasteSnippet {
   id: string;
@@ -38,23 +491,46 @@ export interface PasteSnippet {
   lines: number;
 }
 
-export interface SourceDoc { id: string; name: string; url?: string; snippet: string; page?: number; }
-export interface Citation  { index: number; sourceId: string; text: string; }
+/* ============================================================
+   SOURCES + CITATIONS
+   ============================================================ */
 
-// ---- Pipeline ----
-export type PhaseKey = 'routing' | 'planning' | 'executing' | 'synthesizing';
-export type PhaseStatus = 'pending' | 'active' | 'complete';
+export interface SourceDoc {
+  id: string;
+  name: string;
+  url?: string;
+  snippet: string;
+  page?: number;
+}
+
+export interface Citation {
+  index: number;
+  sourceId: string;
+  text: string;
+}
+
+/* ============================================================
+   PIPELINE TYPES
+   ============================================================ */
+
+export type PhaseKey =
+  | "routing"
+  | "planning"
+  | "executing"
+  | "synthesizing";
+
+export type PhaseStatus = "pending" | "active" | "complete";
 
 export interface PhaseEvent {
   id: string;
   label: string;
   detail?: string;
   toolName?: string;
-  status: 'running' | 'done' | 'error';
+  status: "running" | "done" | "error";
   startedAt: number;
   endedAt?: number;
-  durationMs?: number;
   rawOutput?: string;
+  durationMs?: number;
 }
 
 export interface PipelinePhase {
@@ -67,118 +543,295 @@ export interface PipelinePhase {
   events: PhaseEvent[];
 }
 
-/** Per-session live streaming state. Keyed by sessionId in the slice. */
-export interface LiveTurnState {
-  turnId: string;
-  assistantMessageId: string;
-  pipeline: PipelinePhase[];
-  isStreaming: boolean;
-}
+export type PipelineStage =
+  | "idle"
+  | PhaseKey
+  | "streaming"
+  | "complete";
+
+/* ============================================================
+   STATE
+   ============================================================ */
 
 interface ChatState {
-  /** sessionId → ordered messages */
-  messagesBySession: Record<string, ChatMessage[]>;
-  /** sessionId → live turn state (only present while streaming) */
-  liveBySession: Record<string, LiveTurnState | undefined>;
-  /** Last-error toast text, global. */
+  messages: ChatMessage[];
+
+  isStreaming: boolean;
+
+  pipelineStage: PipelineStage;
+
+  livePipeline: PipelinePhase[];
+
+  liveAssistantId: string | null;
+
+  elapsedTime: number;
+
   error: string | null;
 }
 
 const initialState: ChatState = {
-  messagesBySession: {},
-  liveBySession: {},
+  messages: [],
+  isStreaming: false,
+  pipelineStage: "idle",
+  livePipeline: [],
+  liveAssistantId: null,
+  elapsedTime: 0,
   error: null,
 };
 
-function ensureMsgs(state: ChatState, sid: string): ChatMessage[] {
-  if (!state.messagesBySession[sid]) state.messagesBySession[sid] = [];
-  return state.messagesBySession[sid];
-}
+/* ============================================================
+   SLICE
+   ============================================================ */
 
 const chatSlice = createSlice({
-  name: 'chat',
+  name: "chat",
   initialState,
   reducers: {
-    /** Replace the entire message array for a session (e.g. after fetch). */
-    setMessages(state, a: PayloadAction<{ sessionId: string; messages: ChatMessage[] }>) {
-      state.messagesBySession[a.payload.sessionId] = a.payload.messages;
-    },
-    addMessage(state, a: PayloadAction<{ sessionId: string; message: ChatMessage }>) {
-      ensureMsgs(state, a.payload.sessionId).push(a.payload.message);
-    },
-    appendToken(state, a: PayloadAction<{ sessionId: string; messageId: string; token: string }>) {
-      const m = state.messagesBySession[a.payload.sessionId]?.find(x => x.id === a.payload.messageId);
-      if (m) m.content += a.payload.token;
-    },
-    setMessageStatus(state, a: PayloadAction<{ sessionId: string; messageId: string; status: ChatMessage['status'] }>) {
-      const m = state.messagesBySession[a.payload.sessionId]?.find(x => x.id === a.payload.messageId);
-      if (m) m.status = a.payload.status;
-    },
-    setMessageSources(state, a: PayloadAction<{ sessionId: string; messageId: string; sources: SourceDoc[]; citations: Citation[] }>) {
-      const m = state.messagesBySession[a.payload.sessionId]?.find(x => x.id === a.payload.messageId);
-      if (m) { m.sources = a.payload.sources; m.citations = a.payload.citations; }
-    },
-    setMessagePipeline(state, a: PayloadAction<{ sessionId: string; messageId: string; pipeline: PipelinePhase[] }>) {
-      const m = state.messagesBySession[a.payload.sessionId]?.find(x => x.id === a.payload.messageId);
-      if (m) m.pipeline = a.payload.pipeline;
+    /* ========================================================
+       MESSAGE OPERATIONS
+       ======================================================== */
+
+    /**
+     * Add a new message (user or assistant)
+     */
+    addMessage(state, action: PayloadAction<ChatMessage>) {
+      state.messages.push(action.payload);
     },
 
-    // ---- Live pipeline (per-session) ----
-    initLive(state, a: PayloadAction<{ sessionId: string; turnId: string; assistantMessageId: string; phases: PipelinePhase[] }>) {
-      state.liveBySession[a.payload.sessionId] = {
-        turnId: a.payload.turnId,
-        assistantMessageId: a.payload.assistantMessageId,
-        pipeline: a.payload.phases,
-        isStreaming: true,
-      };
-    },
-    setPhaseStatus(state, a: PayloadAction<{ sessionId: string; phaseKey: PhaseKey; status: PhaseStatus }>) {
-      const live = state.liveBySession[a.payload.sessionId];
-      const ph = live?.pipeline.find(p => p.key === a.payload.phaseKey);
-      if (!ph) return;
-      ph.status = a.payload.status;
-      if (a.payload.status === 'active' && !ph.startedAt) ph.startedAt = Date.now();
-      if (a.payload.status === 'complete') ph.endedAt = Date.now();
-    },
-    addPhaseEvent(state, a: PayloadAction<{ sessionId: string; phaseKey: PhaseKey; event: PhaseEvent }>) {
-      const live = state.liveBySession[a.payload.sessionId];
-      live?.pipeline.find(p => p.key === a.payload.phaseKey)?.events.push(a.payload.event);
-    },
-    appendPhaseEventDetail(state, a: PayloadAction<{ sessionId: string; phaseKey: PhaseKey; eventId: string; chunk: string }>) {
-      const ev = state.liveBySession[a.payload.sessionId]?.pipeline
-        .find(p => p.key === a.payload.phaseKey)?.events.find(e => e.id === a.payload.eventId);
-      if (ev) ev.detail = (ev.detail || '') + a.payload.chunk;
-    },
-    updatePhaseEvent(state, a: PayloadAction<{ sessionId: string; phaseKey: PhaseKey; eventId: string; patch: Partial<PhaseEvent> }>) {
-      const ev = state.liveBySession[a.payload.sessionId]?.pipeline
-        .find(p => p.key === a.payload.phaseKey)?.events.find(e => e.id === a.payload.eventId);
-      if (ev) Object.assign(ev, a.payload.patch);
-    },
-    setLiveStreaming(state, a: PayloadAction<{ sessionId: string; isStreaming: boolean }>) {
-      const live = state.liveBySession[a.payload.sessionId];
-      if (live) live.isStreaming = a.payload.isStreaming;
-    },
-    clearLive(state, a: PayloadAction<{ sessionId: string }>) {
-      delete state.liveBySession[a.payload.sessionId];
+    /**
+     * Append streaming token to assistant message
+     */
+    appendToMessage(
+      state,
+      action: PayloadAction<{ id: string; token: string }>,
+    ) {
+      const msg = state.messages.find(
+        (m) => m.id === action.payload.id,
+      );
+      if (msg) msg.content += action.payload.token;
     },
 
-    setError(state, a: PayloadAction<string | null>) { state.error = a.payload; },
+    /**
+     * Update message status (streaming → complete / error)
+     */
+    setMessageStatus(
+      state,
+      action: PayloadAction<{
+        id: string;
+        status: ChatMessage["status"];
+      }>,
+    ) {
+      const msg = state.messages.find(
+        (m) => m.id === action.payload.id,
+      );
+      if (msg) msg.status = action.payload.status;
+    },
 
-    /** Wipe everything for a session (after delete). */
-    dropSession(state, a: PayloadAction<string>) {
-      delete state.messagesBySession[a.payload];
-      delete state.liveBySession[a.payload];
+    /**
+     * Attach sources & citations to assistant message
+     */
+    setMessageSources(
+      state,
+      action: PayloadAction<{
+        messageId: string;
+        sources: SourceDoc[];
+        citations: Citation[];
+      }>,
+    ) {
+      const msg = state.messages.find(
+        (m) => m.id === action.payload.messageId,
+      );
+      if (msg) {
+        msg.sources = action.payload.sources;
+        msg.citations = action.payload.citations;
+      }
+    },
+
+    /**
+     * Persist full pipeline trace into message
+     */
+    setMessagePipeline(
+      state,
+      action: PayloadAction<{
+        messageId: string;
+        pipeline: PipelinePhase[];
+      }>,
+    ) {
+      const msg = state.messages.find(
+        (m) => m.id === action.payload.messageId,
+      );
+      if (msg) msg.pipeline = action.payload.pipeline;
+    },
+
+    /* ========================================================
+       LIVE PIPELINE (STREAMING)
+       ======================================================== */
+
+    initLivePipeline(
+      state,
+      action: PayloadAction<{
+        assistantId: string;
+        phases: PipelinePhase[];
+      }>,
+    ) {
+      state.liveAssistantId = action.payload.assistantId;
+      state.livePipeline = action.payload.phases;
+    },
+
+    setPhaseStatus(
+      state,
+      action: PayloadAction<{
+        phaseKey: PhaseKey;
+        status: PhaseStatus;
+      }>,
+    ) {
+      const phase = state.livePipeline.find(
+        (p) => p.key === action.payload.phaseKey,
+      );
+
+      if (phase) {
+        phase.status = action.payload.status;
+
+        if (
+          action.payload.status === "active" &&
+          !phase.startedAt
+        ) {
+          phase.startedAt = Date.now();
+        }
+
+        if (action.payload.status === "complete") {
+          phase.endedAt = Date.now();
+        }
+      }
+    },
+
+    addPhaseEvent(
+      state,
+      action: PayloadAction<{
+        phaseKey: PhaseKey;
+        event: PhaseEvent;
+      }>,
+    ) {
+      const phase = state.livePipeline.find(
+        (p) => p.key === action.payload.phaseKey,
+      );
+      if (phase) phase.events.push(action.payload.event);
+    },
+
+    updatePhaseEvent(
+      state,
+      action: PayloadAction<{
+        phaseKey: PhaseKey;
+        eventId: string;
+        patch: Partial<PhaseEvent>;
+      }>,
+    ) {
+      const phase = state.livePipeline.find(
+        (p) => p.key === action.payload.phaseKey,
+      );
+      if (!phase) return;
+
+      const event = phase.events.find(
+        (e) => e.id === action.payload.eventId,
+      );
+
+      if (event) Object.assign(event, action.payload.patch);
+    },
+
+    appendPhaseEventDetail(
+      state,
+      action: PayloadAction<{
+        phaseKey: PhaseKey;
+        eventId: string;
+        chunk: string;
+      }>,
+    ) {
+      const phase = state.livePipeline.find(
+        (p) => p.key === action.payload.phaseKey,
+      );
+      if (!phase) return;
+
+      const event = phase.events.find(
+        (e) => e.id === action.payload.eventId,
+      );
+
+      if (event) {
+        event.detail = (event.detail || "") + action.payload.chunk;
+      }
+    },
+
+    clearLivePipeline(state) {
+      state.livePipeline = [];
+      state.liveAssistantId = null;
+    },
+
+    /* ========================================================
+       GLOBAL FLAGS
+       ======================================================== */
+
+    setStreaming(state, action: PayloadAction<boolean>) {
+      state.isStreaming = action.payload;
+    },
+
+    setPipelineStage(
+      state,
+      action: PayloadAction<PipelineStage>,
+    ) {
+      state.pipelineStage = action.payload;
+    },
+
+    setElapsedTime(
+      state,
+      action: PayloadAction<number>,
+    ) {
+      state.elapsedTime = action.payload;
+    },
+
+    setError(state, action: PayloadAction<string | null>) {
+      state.error = action.payload;
+    },
+
+    /* ========================================================
+       LOAD / RESET
+       ======================================================== */
+
+    loadMessages(state, action: PayloadAction<ChatMessage[]>) {
+      state.messages = action.payload;
+    },
+
+    clearMessages(state) {
+      state.messages = [];
+      state.isStreaming = false;
+      state.pipelineStage = "idle";
+      state.livePipeline = [];
+      state.liveAssistantId = null;
+      state.error = null;
     },
   },
 });
 
+/* ============================================================
+   EXPORTS
+   ============================================================ */
+
 export const {
-  setMessages, addMessage, appendToken, setMessageStatus,
-  setMessageSources, setMessagePipeline,
-  initLive, setPhaseStatus, addPhaseEvent,
-  appendPhaseEventDetail, updatePhaseEvent,
-  setLiveStreaming, clearLive,
-  setError, dropSession,
+  addMessage,
+  appendToMessage,
+  setMessageStatus,
+  setMessageSources,
+  setMessagePipeline,
+  initLivePipeline,
+  setPhaseStatus,
+  addPhaseEvent,
+  updatePhaseEvent,
+  appendPhaseEventDetail,
+  clearLivePipeline,
+  setStreaming,
+  setPipelineStage,
+  setElapsedTime,
+  setError,
+  loadMessages,
+  clearMessages,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

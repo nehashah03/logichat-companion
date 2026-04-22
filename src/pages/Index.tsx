@@ -5,6 +5,7 @@ import { store } from '../store';
 import SessionSidebar from '../components/SessionSidebar';
 import ChatPanel from '../components/ChatPanel';
 import { ThemeModeProvider, useThemeMode } from '../contexts/ThemeModeContext';
+import { SettingsUiProvider } from "../contexts/SettingsUiContext";
 
 const AppContent: React.FC = () => {
   const { palette } = useThemeMode();
@@ -19,7 +20,9 @@ const AppContent: React.FC = () => {
 const Index: React.FC = () => (
   <Provider store={store}>
     <ThemeModeProvider>
+      <SettingsUiProvider>
       <AppContent />
+      </SettingsUiProvider>
     </ThemeModeProvider>
   </Provider>
 );

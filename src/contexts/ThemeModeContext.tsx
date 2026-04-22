@@ -18,7 +18,7 @@ export const ThemeModeProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [mode, setModeState] = useState<ThemeName>(() => {
     try {
       const v = localStorage.getItem(STORAGE_KEY);
-      if (v === 'light' || v === 'midnight') return v;
+      if (v === 'light' || v === 'dark') return v;
     } catch { /* noop */ }
     return 'light';
   });
@@ -28,7 +28,7 @@ export const ThemeModeProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [mode]);
 
   const setMode = useCallback((m: ThemeName) => setModeState(m), []);
-  const toggle = useCallback(() => setModeState(m => (m === 'light' ? 'midnight' : 'light')), []);
+  const toggle = useCallback(() => setModeState(m => (m === 'light' ? 'dark' : 'light')), []);
 
   const theme = useMemo(() => buildTheme(mode), [mode]);
   const palette = PALETTES[mode];
