@@ -1135,6 +1135,12 @@ import { useSettingsUi } from "../contexts/SettingsUiContext";
 
 import type { Session } from "../features/session/sessionSlice";
 
+import {
+  GROUP_LABELS,
+  groupForTimestamp,
+  type GroupKey,
+} from "../utils/grouping";
+
 /* ---------------------------------- */
 /* Sidebar widths                      */
 /* ---------------------------------- */
