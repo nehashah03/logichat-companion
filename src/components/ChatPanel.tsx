@@ -2727,6 +2727,7 @@ import {
   Tooltip,
   Divider,
   TextField,
+  InputAdornment,
 } from "@mui/material";
 
 // Theme toggle icons
@@ -2736,6 +2737,8 @@ import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 // Settings + rename icons
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import SearchIcon from "@mui/icons-material/Search";
+import CloseIcon from "@mui/icons-material/Close";
 
 // Redux hooks
 import { useAppDispatch, useAppSelector } from "../store/hooks";
