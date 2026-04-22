@@ -362,6 +362,44 @@ function fmtTime(ts: number) {
 // Regex used to replace [1], [2] style markers with citation chips
 const CITATION_RE = /\[(\d+)\]/g;
 
+/** Escape a string so it is safe to use inside a RegExp. */
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Wraps every case-insensitive match of `query` inside `text` with a
+ * <mark> element using the current palette's highlight colors.
+ * Returns the original string when `query` is empty.
+ */
+function highlightMatches(
+  text: string,
+  query: string | undefined,
+  palette: any,
+): React.ReactNode {
+  if (!query || !query.trim()) return text;
+  const q = query.trim();
+  const parts = text.split(new RegExp(`(${escapeRegExp(q)})`, "gi"));
+  return parts.map((part, i) =>
+    part.toLowerCase() === q.toLowerCase() ? (
+      <mark
+        key={i}
+        style={{
+          backgroundColor: palette.primarySoft || "rgba(250, 204, 21, 0.45)",
+          color: palette.primary || "inherit",
+          borderRadius: 3,
+          padding: "0 2px",
+          fontWeight: 600,
+        }}
+      >
+        {part}
+      </mark>
+    ) : (
+      <React.Fragment key={i}>{part}</React.Fragment>
+    ),
+  );
+}
+
 /**
  * Replaces inline [1], [2] citation markers inside plain text
  * with interactive citation chips.
@@ -370,8 +408,12 @@ function renderWithCitations(
   text: string,
   sourceById: Map<string, any>,
   citations: any[],
+  searchQuery?: string,
+  palette?: any,
 ) {
-  if (!citations?.length) return text;
+  if (!citations?.length) {
+    return searchQuery ? highlightMatches(text, searchQuery, palette) : text;
+  }
 
   const parts: React.ReactNode[] = [];
   let last = 0;
@@ -382,7 +424,10 @@ function renderWithCitations(
 
     if (!citation) continue;
 
-    parts.push(text.slice(last, match.index));
+    const chunk = text.slice(last, match.index);
+    parts.push(
+      searchQuery ? highlightMatches(chunk, searchQuery, palette) : chunk,
+    );
     parts.push(
       <CitationChip
         key={`cit-${match.index}-${idx}`}
@@ -394,7 +439,8 @@ function renderWithCitations(
     last = (match.index || 0) + match[0].length;
   }
 
-  parts.push(text.slice(last));
+  const tail = text.slice(last);
+  parts.push(searchQuery ? highlightMatches(tail, searchQuery, palette) : tail);
   return parts;
 }
 
