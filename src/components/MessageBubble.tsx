@@ -433,7 +433,7 @@ function isTextAttachment(att: FileAttachment) {
 /* ============================================================
    MAIN COMPONENT
    ============================================================ */
-const MessageBubble: React.FC<Props> = ({ message, onRetry }) => {
+const MessageBubble: React.FC<Props> = ({ message, onRetry, searchQuery }) => {
   /* ------------------------------------------------------------
      BASIC FLAGS
      ------------------------------------------------------------ */
