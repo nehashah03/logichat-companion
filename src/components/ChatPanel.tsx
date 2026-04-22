@@ -2880,6 +2880,12 @@ const ChatPanel: React.FC = () => {
   // Temporary title text while editing
   const [titleDraft, setTitleDraft] = useState("");
 
+  // In-chat search query (used to highlight matches in message bubbles)
+  const [chatSearch, setChatSearch] = useState("");
+
+  // Whether the search input is visible in the header
+  const [searchOpen, setSearchOpen] = useState(false);
+
   /* ------------------------------------------------------------
      DERIVED VALUES
      ------------------------------------------------------------ */
