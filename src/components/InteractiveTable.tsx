@@ -9,7 +9,7 @@
  * react-markdown `table` renderer.
  */
 import React, { useMemo, useState } from 'react';
-import { Box, TextField, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
@@ -51,18 +51,11 @@ function parseTable(children: React.ReactNode): { headers: string[]; rows: React
 const InteractiveTable: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { palette } = useThemeMode();
   const { headers, rows } = useMemo(() => parseTable(children), [children]);
-  const [filters, setFilters] = useState<string[]>(() => headers.map(() => ''));
   const [sortCol, setSortCol] = useState<number | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
 
   const filtered = useMemo(() => {
-    let r = rows.filter(row =>
-      row.every((cell, i) => {
-        const f = (filters[i] || '').toLowerCase().trim();
-        if (!f) return true;
-        return flattenText(cell).toLowerCase().includes(f);
-      }),
-    );
+    let r = rows;
     if (sortCol !== null && sortDir) {
       r = [...r].sort((a, b) => {
         const av = flattenText(a[sortCol]); const bv = flattenText(b[sortCol]);
@@ -72,7 +65,7 @@ const InteractiveTable: React.FC<{ children: React.ReactNode }> = ({ children })
       });
     }
     return r;
-  }, [rows, filters, sortCol, sortDir]);
+  }, [rows, sortCol, sortDir]);
 
   const toggleSort = (i: number) => {
     if (sortCol !== i) { setSortCol(i); setSortDir('asc'); return; }
@@ -91,27 +84,26 @@ const InteractiveTable: React.FC<{ children: React.ReactNode }> = ({ children })
                 background: palette.bgCodeHeader, color: palette.textPrimary, fontWeight: 600,
                 padding: '8px 10px', borderBottom: `1px solid ${palette.border}`,
                 textAlign: 'left', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
-              }} onClick={() => toggleSort(i)}>
-                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+              }}
+              className="group"
+              onClick={() => toggleSort(i)}>
+                <Box sx={{
+                  display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                  '& .sort-icon': { opacity: 0, transition: 'opacity 120ms ease' },
+                  '&:hover .sort-icon': { opacity: 0.6 },
+                  '& .sort-icon.active': { opacity: 1 },
+                }}>
                   {h}
-                  {sortCol === i && sortDir === 'asc' && <ArrowUpwardIcon sx={{ fontSize: 12 }} />}
-                  {sortCol === i && sortDir === 'desc' && <ArrowDownwardIcon sx={{ fontSize: 12 }} />}
-                  {sortCol !== i && <UnfoldMoreIcon sx={{ fontSize: 12, opacity: 0.4 }} />}
+                  {sortCol === i && sortDir === 'asc' && (
+                    <ArrowUpwardIcon className="sort-icon active" sx={{ fontSize: 12 }} />
+                  )}
+                  {sortCol === i && sortDir === 'desc' && (
+                    <ArrowDownwardIcon className="sort-icon active" sx={{ fontSize: 12 }} />
+                  )}
+                  {!(sortCol === i && sortDir) && (
+                    <UnfoldMoreIcon className="sort-icon" sx={{ fontSize: 12 }} />
+                  )}
                 </Box>
-              </th>
-            ))}
-          </tr>
-          <tr>
-            {headers.map((_, i) => (
-              <th key={i} style={{ padding: '4px 6px', background: palette.bgCodeHeader, borderBottom: `1px solid ${palette.border}` }}>
-                <TextField
-                  size="small" variant="standard" placeholder="filter…"
-                  value={filters[i] || ''}
-                  onChange={(e) => setFilters(f => { const n = [...f]; n[i] = e.target.value; return n; })}
-                  onClick={(e) => e.stopPropagation()}
-                  InputProps={{ sx: { fontSize: 11, color: palette.textSecondary } }}
-                  sx={{ width: '100%' }}
-                />
               </th>
             ))}
           </tr>
