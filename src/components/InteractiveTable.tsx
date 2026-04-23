@@ -9,7 +9,7 @@
  * react-markdown `table` renderer.
  */
 import React, { useMemo, useState } from 'react';
-import { Box, TextField, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
@@ -51,18 +51,11 @@ function parseTable(children: React.ReactNode): { headers: string[]; rows: React
 const InteractiveTable: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { palette } = useThemeMode();
   const { headers, rows } = useMemo(() => parseTable(children), [children]);
-  const [filters, setFilters] = useState<string[]>(() => headers.map(() => ''));
   const [sortCol, setSortCol] = useState<number | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
 
   const filtered = useMemo(() => {
-    let r = rows.filter(row =>
-      row.every((cell, i) => {
-        const f = (filters[i] || '').toLowerCase().trim();
-        if (!f) return true;
-        return flattenText(cell).toLowerCase().includes(f);
-      }),
-    );
+    let r = rows;
     if (sortCol !== null && sortDir) {
       r = [...r].sort((a, b) => {
         const av = flattenText(a[sortCol]); const bv = flattenText(b[sortCol]);
@@ -72,7 +65,7 @@ const InteractiveTable: React.FC<{ children: React.ReactNode }> = ({ children })
       });
     }
     return r;
-  }, [rows, filters, sortCol, sortDir]);
+  }, [rows, sortCol, sortDir]);
 
   const toggleSort = (i: number) => {
     if (sortCol !== i) { setSortCol(i); setSortDir('asc'); return; }
